@@ -340,7 +340,7 @@ export default function HomePage() {
 
     function getGreeting() {
         const hour = new Date().getHours();
-        if (hour < 12) return "صباح الخير";
+        if (hour < 12) return "صاح الخير";
         if (hour < 18) return "مساء الخير";
         return "مساء الخير";
     }
