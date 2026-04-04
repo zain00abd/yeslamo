@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { showAppAlert } from "@/lib/appAlert";
 import { showAppConfirm } from "@/lib/appConfirm";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
@@ -66,36 +66,61 @@ export default function MyOrderPage() {
     const [cancelling, setCancelling] = useState(false);
     const unsubRef = useRef(null);
 
-    // Load user + fetch latest order
+    // انتظار جلسة Firebase Auth قبل مستمع Firestore (تجنّب permission-denied عند تحميل الصفحة)
     useEffect(() => {
-        let uid;
-        try {
-            const stored = localStorage.getItem("yaslamo_user");
-            if (!stored) { router.replace("/login"); return; }
-            const parsed = JSON.parse(stored);
-            uid = parsed.id;
-            setUser(parsed);
-        } catch { router.replace("/login"); return; }
+        let cancelled = false;
 
-        async function fetchOrder() {
+        (async () => {
+            await auth.authStateReady();
+            if (cancelled) return;
+            if (!auth.currentUser) {
+                router.replace("/login");
+                setLoading(false);
+                return;
+            }
+
+            let uid;
+            try {
+                const stored = localStorage.getItem("yaslamo_user");
+                if (!stored) {
+                    router.replace("/login");
+                    setLoading(false);
+                    return;
+                }
+                const parsed = JSON.parse(stored);
+                uid = parsed.id;
+                if (parsed.id !== auth.currentUser.uid) {
+                    router.replace("/login");
+                    setLoading(false);
+                    return;
+                }
+                setUser(parsed);
+            } catch {
+                router.replace("/login");
+                setLoading(false);
+                return;
+            }
+
             try {
                 const res = await fetch(`/api/orders/my?uid=${uid}`);
                 const data = await res.json();
+                if (cancelled) return;
                 if (data.order) {
                     setOrder(data.order);
-                    // Start real-time listener
                     startListener(data.order.id);
                 }
             } catch (e) {
                 console.error(e);
             } finally {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             }
-        }
-        fetchOrder();
+        })();
 
-        return () => { if (unsubRef.current) unsubRef.current(); };
-    }, []);
+        return () => {
+            cancelled = true;
+            if (unsubRef.current) unsubRef.current();
+        };
+    }, [router]);
 
     function startListener(orderId) {
         if (unsubRef.current) unsubRef.current();

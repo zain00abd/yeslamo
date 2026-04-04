@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { showAppAlert } from "@/lib/appAlert";
 import { showAppConfirm } from "@/lib/appConfirm";
 import { doc, onSnapshot, collection, query, where, limit, getDocs, updateDoc } from "firebase/firestore";
@@ -135,8 +135,18 @@ function CreateOrderContent() {
         setShowConfirmModal(true);
     }
 
-    // Start listening to the order doc in real-time
-    function startTracking(docId) {
+    // Start listening to the order doc in real-time (بعد جاهزية Auth حتى تقبل قواعد Firestore القراءة)
+    async function startTracking(docId) {
+        if (unsubscribeRef.current) unsubscribeRef.current();
+        await auth.authStateReady();
+        if (!auth.currentUser) {
+            showAppAlert("سجّل الدخول لمتابعة الطلب لحظياً");
+            return;
+        }
+        if (userUid && auth.currentUser.uid !== userUid) {
+            showAppAlert("جلسة غير متطابقة. سجّل الدخول مرة أخرى.");
+            return;
+        }
         const orderRef = doc(db, "orders", docId);
         const unsub = onSnapshot(orderRef, async (snap) => {
             if (!snap.exists()) return;
@@ -224,7 +234,7 @@ function CreateOrderContent() {
             setOrderItems(items);
             setTrackingStatus("pending");
             setShowConfirmModal(false);
-            startTracking(newOrderId);
+            await startTracking(newOrderId);
         } catch (error) {
             setSubmitError("تعذر الاتصال بالخادم. تأكد من اتصالك بالإنترنت.");
             setShowConfirmModal(false);

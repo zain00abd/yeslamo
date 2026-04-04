@@ -1,0 +1,74 @@
+rules_version = '2';
+
+// انسخ هذه القواعد إلى Firebase Console → Firestore → Rules أو نفّذ: firebase deploy --only firestore:rules
+// التطبيق يعتمد على: طلبات معلّقة يقرأها المندوبون، وزبائن يقرؤون طلباتهم، ومندوبون يحدّثون الحالة.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function userData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isDriver() {
+      return isSignedIn() && userData().role == 'driver';
+    }
+
+    function isOrderCustomer() {
+      return isSignedIn() && resource.data.customerUid != null
+        && resource.data.customerUid == request.auth.uid;
+    }
+
+    function isAssignedDriver() {
+      return isSignedIn() && resource.data.driverId == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      // صاحب الحساب، أو مندوب يقرأ ملف زبون، أو زبون يقرأ ملف مندوب (اسم/هاتف للتوصيل)
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId ||
+        (isDriver() && resource.data.role == 'customer') ||
+        (userData().role == 'customer' && resource.data.role == 'driver')
+      );
+      allow create: if false;
+      allow update: if isSignedIn() && (
+        request.auth.uid == userId ||
+        (isDriver()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['customerStatus']))
+      );
+      allow delete: if false;
+    }
+
+    match /orders/{orderId} {
+      allow read: if isSignedIn() && (
+        resource.data.customerUid == request.auth.uid ||
+        resource.data.driverId == request.auth.uid ||
+        (isDriver()
+          && resource.data.status == 'pending'
+          && resource.data.areaId == 'default')
+      );
+      allow create: if false;
+
+      allow update: if isSignedIn() && (
+        // إلغاء من الزبون
+        (isOrderCustomer()
+          && request.resource.data.status == 'cancelled'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+        ||
+        // قبول الطلب (من حالة pending)
+        (isDriver()
+          && resource.data.status == 'pending'
+          && (resource.data.driverId == null || resource.data.driverId == '')
+          && request.resource.data.status == 'accepted'
+          && request.resource.data.driverId == request.auth.uid)
+        ||
+        // تحديثات المندوب بعد الإسناد (حالة، إلغاء، توثيق، إلخ)
+        (isAssignedDriver() && isDriver())
+      );
+    }
+  }
+}

@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { showAppConfirm } from "@/lib/appConfirm";
 
 export default function AccountPage() {
@@ -47,6 +49,11 @@ export default function AccountPage() {
     async function handleLogout() {
         const ok = await showAppConfirm("هل تريد تسجيل الخروج؟");
         if (!ok) return;
+        try {
+            await signOut(auth);
+        } catch (e) {
+            console.error(e);
+        }
         localStorage.removeItem("yaslamo_user");
         window.dispatchEvent(new Event("yaslamo_auth"));
         router.replace("/login");
