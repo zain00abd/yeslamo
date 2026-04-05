@@ -45,6 +45,10 @@ export default function Register() {
         } catch (e) { }
     }, []);
 
+    useEffect(() => {
+        document.title = `${isEditing ? "تعديل الحساب" : "إنشاء حساب"} | يسلمو`;
+    }, [isEditing]);
+
     function getLocation() {
         setGpsError("");
         if (!navigator.geolocation) {
@@ -138,13 +142,31 @@ export default function Register() {
         <div className="page-wrapper">
             <div className="top-bar">
                 <Link href="/" className="top-bar-logo">
-                    <Image src="/logo3.jpg" alt="يسلمو" width={36} height={36} />
+                    <Image src="/logo3.png" alt="يسلمو" width={36} height={36} />
                     <span>{isEditing ? "تعديل الحساب" : "إنشاء حساب"}</span>
                 </Link>
                 <Link href="/" className="top-bar-back">← الرئيسية</Link>
             </div>
 
             <div className="content-area" style={{ paddingTop: "20px", paddingBottom: "30px" }}>
+                <div style={{ textAlign: "center", marginBottom: "28px" }}>
+                    <Image
+                        src="/logo1.jpg"
+                        alt="يسلمو"
+                        width={72}
+                        height={72}
+                        style={{ borderRadius: "18px", marginBottom: "12px" }}
+                    />
+                    <h1 style={{ fontSize: "1.35rem", color: "#1a1a2e", fontWeight: 800, margin: "0 0 8px" }}>
+                        {isEditing ? "تعديل الحساب" : "إنشاء حساب"}
+                    </h1>
+                    <p style={{ color: "#777", fontSize: "0.92rem", margin: 0, lineHeight: 1.5 }}>
+                        {isEditing
+                            ? "حدّث بياناتك وعنوان التوصيل"
+                            : "أنشئ حسابك لطلب التوصيل ومتابعة طلباتك"}
+                    </p>
+                </div>
+
                 {error && (
                     <div style={{
                         background: "#fff0f0", border: "1px solid #ffcdd2", borderRadius: "12px",
@@ -248,9 +270,18 @@ export default function Register() {
                             </div>
                         )}
 
-                        {/* Step 2: address fields — shown only after GPS */}
+                        {/* Step 2: كتابة العنوان — بعد تحديد الموقع */}
                         {gpsDone && (
                             <>
+                                <div className="section-title" style={{ marginTop: "4px", marginBottom: "10px" }}>
+                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+                                    </svg>
+                                    <span>كتابة العنوان</span>
+                                </div>
+                                <p style={{ color: "#666", fontSize: "0.85rem", margin: "0 0 14px", lineHeight: 1.5 }}>
+                                    اختر المدينة ثم اكتب العنوان بالتفصيل (الحي، الشارع، معلم قريب، الطابق).
+                                </p>
                                 <select
                                     className="form-input"
                                     value={city}
