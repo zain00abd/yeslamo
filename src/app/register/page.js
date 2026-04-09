@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { getCurrentUserIdToken } from "@/lib/clientAuth";
 
 const CITY_OPTIONS = ["عربين", "زملكا", "حرستا", "حمورية"];
 
@@ -92,9 +93,19 @@ export default function Register() {
 
         try {
             if (isEditing) {
+                const token = await getCurrentUserIdToken();
+                if (!token) {
+                    setError("انتهت الجلسة، الرجاء تسجيل الدخول مجددًا");
+                    setLoading(false);
+                    return;
+                }
+
                 const res = await fetch("/api/auth/update", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
                     body: JSON.stringify({
                         id: userId,
                         name: name.trim(),

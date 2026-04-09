@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { requireAuthUid } from "@/lib/serverAuth";
 
 function generateOrderNumber() {
     const num = Math.floor(1000 + Math.random() * 9000);
@@ -9,6 +10,9 @@ function generateOrderNumber() {
 
 export async function POST(request) {
     try {
+        const { uid: authUid, error: authError } = await requireAuthUid(request);
+        if (authError) return authError;
+
         const body = await request.json();
         const { customerName, customerPhone, customerAddress, customerUid, items, notes, areaId, locationCoords, locationDesc } = body;
 
@@ -17,6 +21,9 @@ export async function POST(request) {
                 { error: "جميع المعلومات المطلوبة (الاسم، الهاتف، العنوان، الطلبات) يجب توفرها" },
                 { status: 400 }
             );
+        }
+        if (customerUid && customerUid !== authUid) {
+            return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
         }
 
         const orderNumber = generateOrderNumber();
@@ -41,7 +48,7 @@ export async function POST(request) {
             customerName: customerName.trim(),
             customerPhone: customerPhone.trim(),
             customerAddress: customerAddress.trim(),
-            customerUid: customerUid || null,
+            customerUid: customerUid || authUid,
             customerStatus,
             items,
             notes: notes?.trim() || "",

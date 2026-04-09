@@ -1,13 +1,20 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { requireAuthUid } from "@/lib/serverAuth";
 
 export async function POST(request) {
     try {
+        const { uid: authUid, error: authError } = await requireAuthUid(request);
+        if (authError) return authError;
+
         const { id, name, address, city, locationDesc, locationCoords } = await request.json();
 
         if (!id) {
             return NextResponse.json({ error: "المعرف مطلوب" }, { status: 400 });
+        }
+        if (id !== authUid) {
+            return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
         }
 
         const updateData = {

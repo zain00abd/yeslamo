@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useLayoutEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { getCurrentUserIdToken } from "@/lib/clientAuth";
 
 /** أيقونات خطّية بلون موحّد (currentColor) */
 function IconStroke({ children, className = "" }) {
@@ -324,7 +325,11 @@ export default function HomePage() {
         let cancelled = false;
         (async () => {
             try {
-                const res = await fetch(`/api/orders/recent?uid=${encodeURIComponent(userUid)}`);
+                const token = await getCurrentUserIdToken();
+                if (!token) return;
+                const res = await fetch(`/api/orders/recent?uid=${encodeURIComponent(userUid)}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
                 const data = await res.json();
                 if (!cancelled && data.order) setLastOrder(data.order);
             } catch {

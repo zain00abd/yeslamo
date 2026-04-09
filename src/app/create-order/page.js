@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
+import { getCurrentUserIdToken } from "@/lib/clientAuth";
 import { showAppAlert } from "@/lib/appAlert";
 import { showAppConfirm } from "@/lib/appConfirm";
 import { doc, onSnapshot, collection, query, where, limit, getDocs, updateDoc } from "firebase/firestore";
@@ -198,13 +199,24 @@ function CreateOrderContent() {
         setSubmitError("");
 
         try {
+            const token = await getCurrentUserIdToken();
+            if (!token) {
+                setSubmitError("انتهت الجلسة، الرجاء تسجيل الدخول مجددًا");
+                setIsSubmitting(false);
+                setShowConfirmModal(false);
+                return;
+            }
+
             const activeCoords = useCustomLoc ? modalCoords : acctCoords;
             const activeCity = useCustomLoc ? modalCity : acctCity;
             const activeDesc = useCustomLoc ? modalDesc : acctLocationDesc;
 
             const res = await fetch("/api/orders", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
                 body: JSON.stringify({
                     customerName: userName.trim(),
                     customerPhone: userPhone.trim(),

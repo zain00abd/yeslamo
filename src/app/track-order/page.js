@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { auth, db } from "@/lib/firebase";
+import { getCurrentUserIdToken } from "@/lib/clientAuth";
 import { showAppAlert } from "@/lib/appAlert";
 import { showAppConfirm } from "@/lib/appConfirm";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
@@ -102,7 +103,15 @@ export default function MyOrderPage() {
             }
 
             try {
-                const res = await fetch(`/api/orders/my?uid=${uid}`);
+                const token = await getCurrentUserIdToken();
+                if (!token) {
+                    router.replace("/login");
+                    if (!cancelled) setLoading(false);
+                    return;
+                }
+                const res = await fetch(`/api/orders/my?uid=${encodeURIComponent(uid)}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
                 const data = await res.json();
                 if (cancelled) return;
                 if (data.order) {

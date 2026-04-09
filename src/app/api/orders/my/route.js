@@ -1,14 +1,21 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
+import { requireAuthUid } from "@/lib/serverAuth";
 
 // GET /api/orders/my?uid=<customerUid>  — returns the latest active order for the customer
 export async function GET(request) {
     try {
+        const { uid: authUid, error: authError } = await requireAuthUid(request);
+        if (authError) return authError;
+
         const { searchParams } = new URL(request.url);
         const uid = searchParams.get("uid");
 
         if (!uid) {
             return NextResponse.json({ error: "uid مطلوب" }, { status: 400 });
+        }
+        if (uid !== authUid) {
+            return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
         }
 
         // Get the most recent non-cancelled order for this customer
