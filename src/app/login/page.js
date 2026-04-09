@@ -52,7 +52,7 @@ export default function Login() {
                 customerStatus: profile.customerStatus || null,
                 role: profile.role || "customer",
             }));
-            router.push("/");
+            router.push("/home");
         } catch (err) {
             console.error(err);
             if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
