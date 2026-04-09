@@ -39,7 +39,7 @@ export default function Login() {
 
             const profile = profileSnap.data();
 
-            // Save to localStorage (including location data)
+            // Save app session to localStorage
             localStorage.setItem("yaslamo_user", JSON.stringify({
                 id: cred.user.uid,
                 name: profile.name,
@@ -52,11 +52,7 @@ export default function Login() {
                 customerStatus: profile.customerStatus || null,
                 role: profile.role || "customer",
             }));
-            if (profile.role === "driver") {
-                router.push("/driver");
-            } else {
-                router.push("/");
-            }
+            router.push("/");
         } catch (err) {
             console.error(err);
             if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
