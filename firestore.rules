@@ -35,8 +35,11 @@ service cloud.firestore {
         (userData().role == 'customer' && resource.data.role == 'driver')
       );
       allow create: if false;
+      // لا يُسمح بتعديل الرصيد أو الدور من العميل — يمر عبر API الإدارة / قبول الطلب من السيرفر
       allow update: if isSignedIn() && (
-        request.auth.uid == userId ||
+        (request.auth.uid == userId
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['walletBalanceSyp', 'role']))
+        ||
         (isDriver()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['customerStatus']))
       );
@@ -59,13 +62,7 @@ service cloud.firestore {
           && request.resource.data.status == 'cancelled'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
         ||
-        // قبول الطلب (من حالة pending)
-        (isDriver()
-          && resource.data.status == 'pending'
-          && (resource.data.driverId == null || resource.data.driverId == '')
-          && request.resource.data.status == 'accepted'
-          && request.resource.data.driverId == request.auth.uid)
-        ||
+        // قبول الطلب يتم عبر API السيرفر فقط (خصم الرصيد). لا قبول pending→accepted من العميل.
         // تحديثات المندوب بعد الإسناد (حالة، إلغاء، توثيق، إلخ)
         (isAssignedDriver() && isDriver())
       );

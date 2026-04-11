@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
     collection,
@@ -8,7 +8,6 @@ import {
     where,
     orderBy,
     onSnapshot,
-    runTransaction,
     doc,
     getDoc,
     getDocs,
@@ -16,11 +15,16 @@ import {
     serverTimestamp,
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
+import { getCurrentUserIdToken } from "@/lib/clientAuth";
 import { showAppAlert } from "@/lib/appAlert";
 import { showAppConfirm } from "@/lib/appConfirm";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import SwipeToAccept from "./SwipeToAccept";
-import { getDeliveryFeeForOrder } from "@/lib/orderPricing";
+import {
+    getDeliveryFeeForOrder,
+    getAcceptCommissionSyp,
+    DRIVER_MAX_ACTIVE_ORDERS_BEFORE_ACCEPT,
+} from "@/lib/orderPricing";
 import "./driver.css";
 
 // ─── Config ───────────────────────────────────────────────────────────────
@@ -43,8 +47,17 @@ const DRIVER_SETTINGS_DEFAULT = {
 };
 
 // ─── Order Details Modal ──────────────────────────────────────────────────
-function OrderModal({ order, onClose, onAccept, isAccepting }) {
+function OrderModal({ order, onClose, onAccept, isAccepting, walletBalanceSyp, activeIncompleteCount = 0 }) {
     if (!order) return null;
+
+    const commission = getAcceptCommissionSyp(order);
+    const atActiveLimit = activeIncompleteCount >= DRIVER_MAX_ACTIVE_ORDERS_BEFORE_ACCEPT;
+    const swipeBlocked = walletBalanceSyp === null || walletBalanceSyp < commission || atActiveLimit;
+    let swipeHint = "";
+    if (walletBalanceSyp === null) swipeHint = "جاري التحميل...";
+    else if (atActiveLimit) {
+        swipeHint = `أنهِ طلباتك الحالية أولاً (حد أقصى ${DRIVER_MAX_ACTIVE_ORDERS_BEFORE_ACCEPT} طلبات نشطة)`;
+    } else if (walletBalanceSyp < commission) swipeHint = "الرصيد غير كافٍ";
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -122,7 +135,12 @@ function OrderModal({ order, onClose, onAccept, isAccepting }) {
                 )}
 
                 <div style={{ marginTop: "18px" }}>
-                    <SwipeToAccept isLoading={isAccepting} onAccept={() => onAccept(order.id)} />
+                    <SwipeToAccept
+                        isLoading={isAccepting}
+                        disabled={swipeBlocked}
+                        disabledHint={swipeBlocked ? swipeHint : undefined}
+                        onAccept={() => onAccept(order.id)}
+                    />
                 </div>
             </div>
         </div>
@@ -218,9 +236,35 @@ export default function DriverDashboard() {
     const [onTheWayModalOrder, setOnTheWayModalOrder] = useState(null);
     const [onTheWayPurchaseInput, setOnTheWayPurchaseInput] = useState("");
     const [onTheWaySaving, setOnTheWaySaving] = useState(false);
+    /** رصيد المحفظة (ل.س) — null حتى اكتمال أول لقطة من Firestore */
+    const [walletBalanceSyp, setWalletBalanceSyp] = useState(null);
     const callFlowStorageKey = user ? `yaslamo_driver_call_flow_${user.uid}` : null;
     const settingsStorageKey = user ? `yaslamo_driver_settings_${user.uid}` : null;
     const [driverSettings, setDriverSettings] = useState(DRIVER_SETTINGS_DEFAULT);
+    const driverLayoutRef = useRef(null);
+    const driverHeaderRef = useRef(null);
+
+    /** يطابق top للتبويب المثبت مع ارتفاع الهيدر الفعلي (اللفّ على الجوال يكبّر الهيدر) */
+    useLayoutEffect(() => {
+        if (!authChecked || !user || accessDenied) return;
+        const layout = driverLayoutRef.current;
+        const header = driverHeaderRef.current;
+        if (!layout || !header) return;
+
+        const syncStickyOffset = () => {
+            const h = Math.ceil(header.getBoundingClientRect().height);
+            layout.style.setProperty("--driver-header-sticky-offset", `${h}px`);
+        };
+
+        syncStickyOffset();
+        const ro = new ResizeObserver(syncStickyOffset);
+        ro.observe(header);
+        window.addEventListener("resize", syncStickyOffset);
+        return () => {
+            ro.disconnect();
+            window.removeEventListener("resize", syncStickyOffset);
+        };
+    }, [authChecked, user, accessDenied]);
 
     useEffect(() => {
         if (!callFlowStorageKey) return;
@@ -313,6 +357,27 @@ export default function DriverDashboard() {
         verifyDriverRole();
     }, [user]);
 
+    useEffect(() => {
+        if (!user?.uid) {
+            setWalletBalanceSyp(null);
+            return;
+        }
+        const userRef = doc(db, "users", user.uid);
+        const unsub = onSnapshot(
+            userRef,
+            (snap) => {
+                if (!snap.exists()) {
+                    setWalletBalanceSyp(0);
+                    return;
+                }
+                const w = snap.data().walletBalanceSyp;
+                setWalletBalanceSyp(typeof w === "number" && !Number.isNaN(w) ? w : 0);
+            },
+            (err) => console.error("wallet listener:", err)
+        );
+        return () => unsub();
+    }, [user]);
+
     // Real-time listener: pending orders for this area
     useEffect(() => {
         if (!user) return;
@@ -355,38 +420,40 @@ export default function DriverDashboard() {
         return () => { unsub1(); unsub2(); };
     }, [user]);
 
-    // Accept order via Firestore Transaction (prevents race conditions)
+    // قبول الطلب عبر API السيرفر (خصم 20% من رسوم التوصيل من الرصيد)
     const handleAcceptOrder = useCallback(async (orderId) => {
         if (!user) return;
+        if (acceptedOrders.length >= DRIVER_MAX_ACTIVE_ORDERS_BEFORE_ACCEPT) {
+            showAppAlert(
+                `لديك ${DRIVER_MAX_ACTIVE_ORDERS_BEFORE_ACCEPT} طلبات لم تُسلَّم بعد. أنهِ أحدها قبل قبول طلب جديد.`
+            );
+            return;
+        }
         setIsAccepting(true);
 
         try {
-            const orderRef = doc(db, "orders", orderId);
-
-            await runTransaction(db, async (transaction) => {
-                const orderDoc = await transaction.get(orderRef);
-
-                if (!orderDoc.exists()) throw new Error("الطلب غير موجود");
-                if (orderDoc.data().status !== "pending") {
-                    throw new Error(" عذراً، قام مندوب آخر بقبول هذا الطلب أو تم إلغاء الطلب من قبل الزبون ");
-                }
-
-                transaction.update(orderRef, {
-                    status: "accepted",
-                    driverId: user.uid,
-                    updatedAt: serverTimestamp(),
-                });
+            const token = await getCurrentUserIdToken();
+            if (!token) {
+                showAppAlert("انتهت الجلسة. سجّل الدخول مجدداً.");
+                return;
+            }
+            const res = await fetch("/api/driver/accept-order", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ orderId }),
             });
-
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data.error || "تعذر قبول الطلب");
+            }
             setSelectedOrder(null);
-            // The onSnapshot listener will automatically remove the order from the list
         } catch (err) {
             console.error("Accept order error:", err);
             showAppAlert(err.message || "حدث خطأ في قبول الطلب");
         } finally {
             setIsAccepting(false);
         }
-    }, [user]);
+    }, [user, acceptedOrders.length]);
 
     // ── Verification: set customerStatus ONCE ──────────────────────────────
     const handleVerifyCustomer = useCallback(async (order, action) => {
@@ -513,34 +580,53 @@ export default function DriverDashboard() {
     }
 
     return (
-        <div className="driver-layout">
-            <header className="driver-header">
-                <div className="driver-title">
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="white">
-                        <path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
-                    </svg>
-                    بوابة المندوبين
+        <div className="driver-layout" ref={driverLayoutRef}>
+            <header className="driver-header" ref={driverHeaderRef}>
+                <div className="driver-header-brand">
+                    <div className="driver-title">
+                        <span className="driver-title-icon-wrap" aria-hidden>
+                            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                                <path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
+                            </svg>
+                        </span>
+                        <div className="driver-title-text-block">
+                            <span className="driver-title-eyebrow">يسلمو</span>
+                            <span className="driver-title-text">بوابة المندوبين</span>
+                        </div>
+                    </div>
+                    <div className="driver-header-wallet" title="رصيد المحفظة">
+                        <span className="driver-header-wallet-icon" aria-hidden>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+                                <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+                                <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+                            </svg>
+                        </span>
+                        <span className="driver-header-wallet-body">
+                            <span className="driver-header-wallet-label">رصيد</span>
+                            <span className="driver-header-wallet-amount">
+                                <span className="driver-header-wallet-value">{walletBalanceSyp === null ? "…" : walletBalanceSyp}</span>
+                                <span className="driver-header-wallet-currency">ل.س</span>
+                            </span>
+                        </span>
+                    </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div className="driver-header-actions">
                     <div className={`driver-status-badge ${driverSettings.isAvailable ? "" : "driver-status-badge--offline"}`}>
                         {driverSettings.isAvailable ? "متاح" : "غير متاح"}
                     </div>
-                    <Link
-                        href="/driver/settings"
-                        className="driver-settings-btn"
-                        aria-label="إعدادات المندوب"
-                        title="إعدادات المندوب"
-                    >
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
-                            <path d="M19.14 12.94a7.96 7.96 0 0 0 .05-.94 7.96 7.96 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.17 7.17 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.49.42l-.36 2.54c-.58.22-1.13.53-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.48a.5.5 0 0 0 .12.64l2.03 1.58a7.96 7.96 0 0 0-.05.94c0 .32.02.63.05.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.6.22l2.39-.96c.5.4 1.05.72 1.63.94l.36 2.54c.04.24.25.42.49.42h3.8c.24 0 .45-.18.49-.42l.36-2.54c.58-.22 1.13-.53 1.63-.94l2.39.96c.22.09.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z" />
-                        </svg>
-                    </Link>
-                    <button
-                        onClick={() => auth.signOut().then(() => setUser(null))}
-                        className="driver-logout-btn"
-                    >
-                        خروج
-                    </button>
+                    <div className="driver-header-toolbar">
+                        <Link
+                            href="/driver/settings"
+                            className="driver-settings-btn"
+                            aria-label="إعدادات المندوب"
+                            title="إعدادات المندوب"
+                        >
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                                <path d="M19.14 12.94a7.96 7.96 0 0 0 .05-.94 7.96 7.96 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.17 7.17 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.49.42l-.36 2.54c-.58.22-1.13.53-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.48a.5.5 0 0 0 .12.64l2.03 1.58a7.96 7.96 0 0 0-.05.94c0 .32.02.63.05.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.6.22l2.39-.96c.5.4 1.05.72 1.63.94l.36 2.54c.04.24.25.42.49.42h3.8c.24 0 .45-.18.49-.42l.36-2.54c.58-.22 1.13-.53 1.63-.94l2.39.96c.22.09.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z" />
+                            </svg>
+                        </Link>
+                    </div>
                 </div>
             </header>
 
@@ -581,6 +667,25 @@ export default function DriverDashboard() {
                             الطلبات المتاحة ({orders.length})
                             <span style={{ fontSize: "0.78rem", color: "var(--driver-accent)", fontWeight: 700, display: "flex", alignItems: "center", gap: "4px" }}>● مباشر</span>
                         </div>
+
+                        {acceptedOrders.length >= DRIVER_MAX_ACTIVE_ORDERS_BEFORE_ACCEPT && (
+                            <div
+                                style={{
+                                    marginBottom: "14px",
+                                    padding: "10px 12px",
+                                    borderRadius: "10px",
+                                    background: "#fef3c7",
+                                    border: "1px solid #fcd34d",
+                                    fontSize: "0.86rem",
+                                    fontWeight: 700,
+                                    color: "#92400e",
+                                    lineHeight: 1.55,
+                                }}
+                            >
+                                لديك {DRIVER_MAX_ACTIVE_ORDERS_BEFORE_ACCEPT} طلبات لم تُسلَّم بعد. أنهِ أحدها من «طلباتي» قبل
+                                قبول طلب جديد.
+                            </div>
+                        )}
 
                         {orders.length === 0 ? (
                             <div className="empty-state">
@@ -735,10 +840,6 @@ export default function DriverDashboard() {
                                                         </button>
                                                     )}
                                                 </div>
-                                                <a href={`tel:${order.customerPhone}`} style={{ color: "var(--driver-primary)", fontWeight: 600, fontSize: "0.88rem", textDecoration: "none", display: "flex", alignItems: "center", gap: "4px" }} dir="ltr">
-                                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
-                                                    {order.customerPhone}
-                                                </a>
                                             </div>
                                             <a
                                                 href={`tel:${order.customerPhone}`}
@@ -997,6 +1098,8 @@ export default function DriverDashboard() {
                 onClose={() => !isAccepting && setSelectedOrder(null)}
                 onAccept={handleAcceptOrder}
                 isAccepting={isAccepting}
+                walletBalanceSyp={walletBalanceSyp}
+                activeIncompleteCount={acceptedOrders.length}
             />
 
             {onTheWayModalOrder && (

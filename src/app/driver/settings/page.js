@@ -5,7 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { auth, db } from "@/lib/firebase";
 import { showAppAlert } from "@/lib/appAlert";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { DRIVER_DELIVERY_COMMISSION_RATE } from "@/lib/orderPricing";
 import "../driver.css";
 
 const DRIVER_AREA_ID = "default";
@@ -28,6 +29,7 @@ export default function DriverSettingsPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [installPrompt, setInstallPrompt] = useState(null);
     const [isInstalled, setIsInstalled] = useState(false);
+    const [walletBalanceSyp, setWalletBalanceSyp] = useState(null);
 
     const settingsStorageKey = user ? `yaslamo_driver_settings_${user.uid}` : null;
 
@@ -90,6 +92,26 @@ export default function DriverSettingsPage() {
 
         loadSettings();
     }, [user, settingsStorageKey]);
+
+    useEffect(() => {
+        if (!user?.uid || !isDriver) {
+            setWalletBalanceSyp(null);
+            return;
+        }
+        const unsub = onSnapshot(
+            doc(db, "users", user.uid),
+            (snap) => {
+                if (!snap.exists()) {
+                    setWalletBalanceSyp(0);
+                    return;
+                }
+                const w = snap.data().walletBalanceSyp;
+                setWalletBalanceSyp(typeof w === "number" && !Number.isNaN(w) ? w : 0);
+            },
+            (err) => console.error("wallet snapshot:", err)
+        );
+        return () => unsub();
+    }, [user, isDriver]);
 
     useEffect(() => {
         const standaloneMatch = window.matchMedia("(display-mode: standalone)").matches;
@@ -188,12 +210,33 @@ export default function DriverSettingsPage() {
         <div className="driver-layout">
             <header className="driver-header">
                 <div className="driver-title">إعدادات المندوب</div>
-                <Link href="/driver" className="driver-logout-btn" style={{ textDecoration: "none" }}>
-                    رجوع
-                </Link>
+                <div className="driver-settings-header-actions">
+                    <Link href="/driver" className="driver-settings-back-link">
+                        رجوع
+                    </Link>
+                    <button
+                        type="button"
+                        className="driver-logout-btn"
+                        onClick={() => auth.signOut()}
+                    >
+                        تسجيل الخروج
+                    </button>
+                </div>
             </header>
 
             <main className="driver-content">
+                <div className="section-heading">رصيد المحفظة</div>
+                <div className="accepted-card" style={{ padding: "16px", marginBottom: "14px" }}>
+                    <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--driver-text-muted)", marginBottom: "6px" }}>الرصيد الحالي (ل.س جديدة)</div>
+                    <div style={{ fontSize: "1.65rem", fontWeight: 900, color: "var(--driver-primary)", fontVariantNumeric: "tabular-nums" }}>
+                        {walletBalanceSyp === null ? "…" : `${walletBalanceSyp} ل.س`}
+                    </div>
+                    <p style={{ fontSize: "0.82rem", color: "var(--driver-text-muted)", marginTop: "12px", lineHeight: 1.55, fontWeight: 600 }}>
+                        عند قبول أي طلب يُخصم تلقائياً <strong style={{ color: "var(--driver-text)" }}>{Math.round(DRIVER_DELIVERY_COMMISSION_RATE * 100)}%</strong> من{" "}
+                        <strong style={{ color: "var(--driver-text)" }}>رسوم التوصيل</strong> للطلب (وليس من ثمن البضاعة). لشحن الرصيد أو الاستفسار، تواصل مع إدارة يسلمو.
+                    </p>
+                </div>
+
                 <div className="section-heading">إعدادات الحساب</div>
 
                 <div className="accepted-card" style={{ padding: "14px" }}>

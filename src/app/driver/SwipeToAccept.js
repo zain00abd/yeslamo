@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import "./driver.css";
 
-export default function SwipeToAccept({ onAccept, isLoading }) {
+export default function SwipeToAccept({ onAccept, isLoading, disabled = false, disabledHint }) {
     const [position, setPosition] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const containerRef = useRef(null);
@@ -25,12 +25,12 @@ export default function SwipeToAccept({ onAccept, isLoading }) {
     }, [isLoading]);
 
     const handleStart = (clientX) => {
-        if (isLoading) return;
+        if (isLoading || disabled) return;
         setIsDragging(true);
     };
 
     const handleMove = (clientX) => {
-        if (!isDragging || isLoading) return;
+        if (!isDragging || isLoading || disabled) return;
 
         // Calculate new position relative to container
         const rect = containerRef.current.getBoundingClientRect();
@@ -44,7 +44,7 @@ export default function SwipeToAccept({ onAccept, isLoading }) {
     };
 
     const handleEnd = () => {
-        if (!isDragging || isLoading) return;
+        if (!isDragging || isLoading || disabled) return;
         setIsDragging(false);
 
         // If swiped more than 80%, accept
@@ -75,7 +75,7 @@ export default function SwipeToAccept({ onAccept, isLoading }) {
 
     return (
         <div
-            className="swipe-container"
+            className={`swipe-container${disabled ? " swipe-container--disabled" : ""}`}
             ref={containerRef}
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
@@ -90,7 +90,11 @@ export default function SwipeToAccept({ onAccept, isLoading }) {
             />
 
             <div className="swipe-text">
-                {isLoading ? "جاري القبول..." : "اسحب للقبول >>"}
+                {disabled
+                    ? disabledHint || "لا يمكن القبول حالياً"
+                    : isLoading
+                      ? "جاري القبول..."
+                      : "اسحب للقبول >>"}
             </div>
 
             <div
