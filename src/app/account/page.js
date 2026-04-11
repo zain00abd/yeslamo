@@ -116,7 +116,7 @@ export default function AccountPage() {
 
                 {/* Info Card */}
                 <div style={{
-                    background: "white", borderRadius: "20px", overflow: "hidden",
+                    background: "var(--surface)", borderRadius: "20px", overflow: "hidden",
                     boxShadow: "0 4px 20px rgba(0,0,0,0.06)", border: "1px solid #f0f0f0",
                     marginTop: "12px", marginBottom: "16px",
                 }}>
@@ -137,7 +137,7 @@ export default function AccountPage() {
 
                 {/* Quick Actions */}
                 <div style={{
-                    background: "white", borderRadius: "20px", overflow: "hidden",
+                    background: "var(--surface)", borderRadius: "20px", overflow: "hidden",
                     boxShadow: "0 4px 20px rgba(0,0,0,0.06)", border: "1px solid #f0f0f0",
                     marginBottom: "16px",
                 }}>
@@ -164,7 +164,7 @@ export default function AccountPage() {
                         style={{
                             width: "100%",
                             border: "none",
-                            background: "white",
+                            background: "var(--surface)",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "space-between",
@@ -185,7 +185,7 @@ export default function AccountPage() {
 
                 {/* Legal */}
                 <div style={{
-                    background: "white", borderRadius: "20px", overflow: "hidden",
+                    background: "var(--surface)", borderRadius: "20px", overflow: "hidden",
                     boxShadow: "0 4px 20px rgba(0,0,0,0.06)", border: "1px solid #f0f0f0",
                     marginBottom: "16px",
                 }}>

@@ -55,7 +55,7 @@ export default function InstallPage() {
       <div style={{ width: "100%", maxWidth: "560px", margin: "0 auto" }}>
         <div
           style={{
-            background: "white",
+            background: "var(--surface)",
             borderRadius: "20px",
             border: "1px solid #f0f0f0",
             boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
@@ -151,7 +151,7 @@ export default function InstallPage() {
                   border: "1px solid #e5e7eb",
                   fontWeight: 800,
                   color: "#374151",
-                  background: "#fff",
+                  background: "var(--surface)",
                 }}
               >
                 الصفحة الرئيسية

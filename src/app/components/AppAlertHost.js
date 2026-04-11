@@ -76,7 +76,7 @@ export default function AppAlertHost() {
                 style={{
                     width: "100%",
                     maxWidth: "420px",
-                    background: "#fff",
+                    background: "var(--surface)",
                     borderRadius: "14px",
                     border: "1px solid #e2e8f0",
                     boxShadow: "0 16px 42px rgba(2, 6, 23, 0.24)",
@@ -116,7 +116,7 @@ export default function AppAlertHost() {
                             style={{
                                 border: "1px solid #cbd5e1",
                                 borderRadius: "10px",
-                                background: "#fff",
+                                background: "var(--surface)",
                                 color: "#334155",
                                 padding: "11px 12px",
                                 fontFamily: "inherit",

@@ -9,6 +9,7 @@ import { getCurrentUserIdToken } from "@/lib/clientAuth";
 import { showAppAlert } from "@/lib/appAlert";
 import { showAppConfirm } from "@/lib/appConfirm";
 import { doc, onSnapshot, collection, query, where, limit, getDocs, updateDoc } from "firebase/firestore";
+import { DEFAULT_DELIVERY_FEE_SYP } from "@/lib/orderPricing";
 
 const CITY_OPTIONS = ["عربين", "زملكا", "حرستا", "حمورية"];
 
@@ -287,9 +288,9 @@ function CreateOrderContent() {
 
     return (
         <>
-            <div className="page-wrapper">
-                {/* Form Content */}
-                <div className="content-area" style={{ paddingTop: "14px", paddingBottom: "14px" }}>
+            <div className="page-wrapper create-order-page">
+                {/* Form Content — ملء الشاشة: التمرير داخل منطقة الطلب فقط */}
+                <div className="content-area create-order-content">
 
                     {/* Orders — refreshed design */}
                 <div className="order-mode-toggle-wrap order-mode-toggle-wrap--above">
@@ -320,7 +321,7 @@ function CreateOrderContent() {
                     </div>
                 </div>
 
-                    <div className="order-section-card">
+                    <div className={`order-section-card${isCallMode ? " order-section-card--call" : ""}`}>
                         <div className="order-section-header">
                             <div className="order-section-icon">
                                 <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h10v2H7v-2z" /></svg>
@@ -347,12 +348,14 @@ function CreateOrderContent() {
                                     اكتب طلباتك هنا
                                 </div>
 
-                                <textarea
-                                    className="order-textarea"
-                                    placeholder={`بيتزا عائلية - 2\nمشروب غازي - 3\nبطاطس مقلية كبيرة - 1\n\nاكتب كل صنف في سطر...`}
-                                    value={orders}
-                                    onChange={(e) => setOrders(e.target.value)}
-                                />
+                                <div className="order-textarea-scroll">
+                                    <textarea
+                                        className="order-textarea"
+                                        placeholder={`بيتزا عائلية - 2\nمشروب غازي - 3\nبطاطس مقلية كبيرة - 1\n\nاكتب كل صنف في سطر...`}
+                                        value={orders}
+                                        onChange={(e) => setOrders(e.target.value)}
+                                    />
+                                </div>
 
                                 <div className="order-hint">
                                     <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" /></svg>
@@ -363,7 +366,7 @@ function CreateOrderContent() {
                     </div>
 
                     {submitError && (
-                        <div style={{
+                        <div className="create-order-submit-error" style={{
                             background: "#fff0f0", border: "1px solid #ffcdd2", borderRadius: "12px",
                             padding: "12px 16px", marginBottom: "16px", color: "#c62828", fontSize: "0.9rem",
                             display: "flex", alignItems: "center", gap: "8px",
@@ -387,25 +390,35 @@ function CreateOrderContent() {
 
             {/* ── CONFIRMATION MODAL — Location check before submit ── */}
             {showConfirmModal && (
-                <div style={{
-                    position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    zIndex: 1000,
-                    padding: "max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))",
-                    boxSizing: "border-box",
-                }}
+                <div
+                    className="create-order-modal-backdrop"
+                    style={{
+                        position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        zIndex: 1000,
+                        padding: "max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))",
+                        boxSizing: "border-box",
+                        overflow: "hidden",
+                    }}
                     onClick={() => setShowConfirmModal(false)}
                 >
                     <div style={{
-                        background: "white", borderRadius: "20px",
-                        padding: "24px 20px 28px", width: "100%",
-                        maxWidth: "min(520px, calc(100vw - 32px))",
-                        maxHeight: "min(90vh, 720px)", overflowY: "auto",
+                        background: "var(--surface)", borderRadius: "20px",
+                        padding: "24px 20px 20px", width: "100%",
+                        maxWidth: "min(520px, calc(100vw - 24px))",
+                        height: "min(720px, calc(100dvh - 24px))",
+                        maxHeight: "min(720px, calc(100dvh - 24px))",
+                        display: "flex",
+                        flexDirection: "column",
+                        overflow: "hidden",
                         boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
                     }}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div style={{ fontWeight: 800, fontSize: "1.15rem", marginBottom: "20px", textAlign: "center", color: "#1a1a2e" }}>
+                        <div style={{
+                            fontWeight: 800, fontSize: "1.15rem", marginBottom: "16px", textAlign: "center", color: "#1a1a2e",
+                            flexShrink: 0,
+                        }}>
                             تأكيد موقع التوصيل
                         </div>
 
@@ -413,6 +426,7 @@ function CreateOrderContent() {
                         <div style={{
                             background: "#f0fdf4", borderRadius: "14px", padding: "16px",
                             border: "1.5px solid #a7f3d0", marginBottom: "14px",
+                            flexShrink: 0,
                         }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="#059669">
@@ -433,11 +447,12 @@ function CreateOrderContent() {
                             onClick={() => { setShowConfirmModal(false); setShowLocModal(true); }}
                             style={{
                                 width: "100%", padding: "12px", borderRadius: "12px",
-                                border: "1.5px solid #ff6b35", background: "white",
+                                border: "1.5px solid #ff6b35", background: "var(--surface)",
                                 color: "#ff6b35", fontFamily: "inherit", fontWeight: 700,
                                 fontSize: "0.92rem", cursor: "pointer",
                                 display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-                                marginBottom: "18px",
+                                marginBottom: "14px",
+                                flexShrink: 0,
                             }}
                         >
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
@@ -446,36 +461,159 @@ function CreateOrderContent() {
                             تغيير الموقع
                         </button>
 
-                        {/* Order summary in confirm modal */}
+                        {/* Order summary: عنوان + قائمة قابلة للتمرير + رسوم ثابتة */}
                         <div style={{
-                            background: "#fafafa", borderRadius: "12px", padding: "14px",
-                            border: "1px solid #f0f0f0", marginBottom: "18px",
+                            background: "#fafafa", borderRadius: "12px", padding: "12px 12px 14px",
+                            border: "1px solid #f0f0f0", marginBottom: "16px",
+                            flex: 1,
+                            minHeight: 0,
+                            display: "flex",
+                            flexDirection: "column",
+                            overflow: "hidden",
                         }}>
-                            <div style={{ fontSize: "0.78rem", color: "#888", fontWeight: 700, marginBottom: "8px" }}>
+                            <div style={{
+                                fontSize: "0.78rem", color: "#888", fontWeight: 700, marginBottom: "8px",
+                                flexShrink: 0,
+                            }}>
                                 ملخص الطلب
                             </div>
-                            {getOrderSummaryItems().map((item, i) => (
-                                <div key={i} style={{
-                                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                                    padding: "6px 0", borderBottom: i < getOrderSummaryItems().length - 1 ? "1px solid #f0f0f0" : "none",
-                                    fontSize: "0.88rem", color: "#334155",
-                                }}>
-                                    <span style={{ background: "#fff0eb", color: "#ff6b35", borderRadius: "6px", padding: "2px 8px", fontSize: "0.78rem", fontWeight: 700 }}>
-                                        × {item.quantity}
-                                    </span>
-                                    <span>{item.name}</span>
+                            <div
+                                style={{
+                                    flex: 1,
+                                    minHeight: 0,
+                                    overflowY: "auto",
+                                    WebkitOverflowScrolling: "touch",
+                                    overscrollBehavior: "contain",
+                                    paddingInlineEnd: "4px",
+                                }}
+                            >
+                                {getOrderSummaryItems().map((item, i) => (
+                                    <div key={i} style={{
+                                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                                        padding: "6px 0", borderBottom: i < getOrderSummaryItems().length - 1 ? "1px solid #f0f0f0" : "none",
+                                        fontSize: "0.88rem", color: "#334155",
+                                    }}>
+                                        <span style={{ background: "#fff0eb", color: "#ff6b35", borderRadius: "6px", padding: "2px 8px", fontSize: "0.78rem", fontWeight: 700 }}>
+                                            × {item.quantity}
+                                        </span>
+                                        <span>{item.name}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div
+                                style={{
+                                    marginTop: "10px",
+                                    paddingTop: "12px",
+                                    borderTop: "1px solid #e8eaee",
+                                    flexShrink: 0,
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        gap: "12px",
+                                        padding: "12px 14px",
+                                        borderRadius: "14px",
+                                        background: "linear-gradient(135deg, #fffdfb 0%, #fff4ed 100%)",
+                                        border: "1px solid rgba(255, 107, 53, 0.2)",
+                                        boxShadow: "0 4px 14px rgba(255, 107, 53, 0.1)",
+                                    }}
+                                >
+                                    <div
+                                        style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "10px",
+                                            flex: 1,
+                                            minWidth: 0,
+                                        }}
+                                    >
+                                        <div
+                                            aria-hidden
+                                            style={{
+                                                width: "42px",
+                                                height: "42px",
+                                                borderRadius: "12px",
+                                                background: "linear-gradient(145deg, #ff6b35, #ff8f5a)",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                flexShrink: 0,
+                                                boxShadow: "0 4px 14px rgba(255, 107, 53, 0.35)",
+                                            }}
+                                        >
+                                            <svg viewBox="0 0 24 24" width="22" height="22" fill="white">
+                                                <path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
+                                            </svg>
+                                        </div>
+                                        <div style={{ minWidth: 0 }}>
+                                            <div
+                                                style={{
+                                                    fontSize: "0.82rem",
+                                                    color: "#1e293b",
+                                                    fontWeight: 800,
+                                                    lineHeight: 1.35,
+                                                }}
+                                            >
+                                                رسوم التوصيل
+                                            </div>
+                                            <div
+                                                style={{
+                                                    fontSize: "0.72rem",
+                                                    color: "#94a3b8",
+                                                    fontWeight: 600,
+                                                    marginTop: "2px",
+                                                }}
+                                            >
+                                                ثابتة لهذا الطلب
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div
+                                        style={{
+                                            flexShrink: 0,
+                                            textAlign: "center",
+                                            paddingInlineStart: "4px",
+                                        }}
+                                    >
+                                        <div
+                                            style={{
+                                                fontSize: "1.4rem",
+                                                fontWeight: 900,
+                                                color: "#ea580c",
+                                                fontVariantNumeric: "tabular-nums",
+                                                lineHeight: 1.1,
+                                                letterSpacing: "-0.02em",
+                                            }}
+                                        >
+                                            {DEFAULT_DELIVERY_FEE_SYP}
+                                        </div>
+                                        <div
+                                            style={{
+                                                fontSize: "0.7rem",
+                                                color: "#64748b",
+                                                fontWeight: 700,
+                                                marginTop: "4px",
+                                                whiteSpace: "nowrap",
+                                            }}
+                                        >
+                                            ل.س جديدة
+                                        </div>
+                                    </div>
                                 </div>
-                            ))}
+                            </div>
                         </div>
 
                         {/* Confirm / Cancel buttons */}
-                        <div style={{ display: "flex", gap: "10px" }}>
+                        <div style={{ display: "flex", gap: "10px", flexShrink: 0, paddingTop: "4px" }}>
                             <button
                                 type="button"
                                 onClick={() => setShowConfirmModal(false)}
                                 style={{
                                     flex: 1, padding: "14px", borderRadius: "12px",
-                                    border: "1.5px solid #e2e8f0", background: "white",
+                                    border: "1.5px solid #e2e8f0", background: "var(--surface)",
                                     fontFamily: "inherit", fontWeight: 600, cursor: "pointer", color: "#64748b",
                                     fontSize: "0.95rem",
                                 }}
@@ -503,20 +641,25 @@ function CreateOrderContent() {
 
             {/* Location change modal */}
             {showLocModal && (
-                <div style={{
-                    position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    zIndex: 1000,
-                    padding: "max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))",
-                    boxSizing: "border-box",
-                }}
+                <div
+                    className="create-order-modal-backdrop"
+                    style={{
+                        position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        zIndex: 1000,
+                        padding: "max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))",
+                        boxSizing: "border-box",
+                        overflow: "hidden",
+                    }}
                     onClick={() => setShowLocModal(false)}
                 >
                     <div style={{
-                        background: "white", borderRadius: "20px",
+                        background: "var(--surface)", borderRadius: "20px",
                         padding: "24px 20px 32px", width: "100%",
-                        maxWidth: "min(520px, calc(100vw - 32px))",
-                        maxHeight: "min(90vh, 720px)", overflowY: "auto",
+                        maxWidth: "min(520px, calc(100vw - 24px))",
+                        height: "min(720px, calc(100dvh - 24px))",
+                        maxHeight: "min(720px, calc(100dvh - 24px))",
+                        overflowY: "auto",
                         boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
                     }}
                         onClick={(e) => e.stopPropagation()}
@@ -585,7 +728,7 @@ function CreateOrderContent() {
                                 onClick={() => setShowLocModal(false)}
                                 style={{
                                     flex: 1, padding: "12px", borderRadius: "12px",
-                                    border: "1.5px solid #e2e8f0", background: "white",
+                                    border: "1.5px solid #e2e8f0", background: "var(--surface)",
                                     fontFamily: "inherit", fontWeight: 600, cursor: "pointer", color: "#64748b",
                                 }}
                             >
@@ -610,9 +753,16 @@ function CreateOrderContent() {
             {/* ── TRACKING SCREEN — Pending ───────────────────────── */}
             {trackingStatus === "pending" && (
                 <div style={{
-                    position: "fixed", inset: 0, background: "linear-gradient(135deg,#fff8f6 0%,#fff 100%)",
-                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                    zIndex: 2000, padding: "24px", textAlign: "center",
+                    position: "fixed", inset: 0, background: "linear-gradient(135deg,#fff8f6 0%,var(--surface) 100%)",
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start",
+                    zIndex: 2000,
+                    padding: "max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))",
+                    textAlign: "center",
+                    boxSizing: "border-box",
+                    height: "100dvh",
+                    maxHeight: "100dvh",
+                    overflow: "hidden",
+                    overflowX: "hidden",
                 }}>
                     <style>{`
                         @keyframes pulse-ring {
@@ -622,21 +772,60 @@ function CreateOrderContent() {
                         @keyframes spin-dot {
                             to { stroke-dashoffset: 0; }
                         }
-                        .pulse-wrap { position:relative; width:120px; height:120px; display:flex; align-items:center; justify-content:center; }
-                        .pulse-ring {
-                            position:absolute; inset:0; border-radius:50%;
-                            border: 3px solid #ff6b35; animation: pulse-ring 1.5s ease-out infinite;
+                        /* دوائر ثابتة: لا تُضغط مع flex العمودي (تجنّب شكل بيضاوي) */
+                        .pulse-wrap {
+                            position: relative;
+                            width: 120px;
+                            height: 120px;
+                            min-width: 120px;
+                            min-height: 120px;
+                            aspect-ratio: 1;
+                            flex-shrink: 0;
+                            box-sizing: border-box;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
                         }
-                        .pulse-ring:nth-child(2) { animation-delay:0.5s; }
+                        .pulse-ring {
+                            position: absolute;
+                            inset: 0;
+                            width: 100%;
+                            height: 100%;
+                            box-sizing: border-box;
+                            border-radius: 50%;
+                            border: 3px solid #ff6b35;
+                            animation: pulse-ring 1.5s ease-out infinite;
+                        }
+                        .pulse-ring:nth-child(2) { animation-delay: 0.5s; }
                     `}</style>
 
+                    <div style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        width: "100%",
+                        maxWidth: "480px",
+                        margin: "0 auto",
+                        flex: "1 1 auto",
+                        minHeight: 0,
+                        overflow: "hidden",
+                        justifyContent: "center",
+                    }}>
                     <div className="pulse-wrap">
                         <div className="pulse-ring"></div>
                         <div className="pulse-ring"></div>
                         <div style={{
-                            width: 72, height: 72, borderRadius: "50%",
+                            width: 72,
+                            height: 72,
+                            minWidth: 72,
+                            minHeight: 72,
+                            aspectRatio: "1",
+                            flexShrink: 0,
+                            borderRadius: "50%",
                             background: "linear-gradient(135deg,#ff6b35,#ff8c5a)",
-                            display: "flex", alignItems: "center", justifyContent: "center",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
                             boxShadow: "0 8px 24px rgba(255,107,53,0.4)",
                         }}>
                             <svg viewBox="0 0 24 24" width="36" height="36" fill="white">
@@ -649,61 +838,137 @@ function CreateOrderContent() {
                         </div>
                     </div>
 
-                    <h2 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#1a1a2e", marginTop: "32px", marginBottom: "8px" }}>
+                    <h2 style={{
+                        fontSize: "clamp(1.15rem, 4vw, 1.5rem)",
+                        fontWeight: 800,
+                        color: "#1a1a2e",
+                        marginTop: "24px",
+                        marginBottom: "8px",
+                        flexShrink: 0,
+                        lineHeight: 1.35,
+                        paddingInline: "8px",
+                    }}>
                         جاري البحث عن مندوب...
                     </h2>
-                    <p style={{ color: "#64748b", fontSize: "0.95rem", marginBottom: "32px" }}>
+                    <p style={{
+                        color: "#64748b",
+                        fontSize: "0.95rem",
+                        marginBottom: "24px",
+                        flexShrink: 0,
+                        lineHeight: 1.5,
+                        paddingInline: "8px",
+                    }}>
                         {isCallMode
                             ? "طلب تواصل في الانتظار، سيتم الاتصال بك هاتفيا بمجرد قبول المندوب"
                             : "طلبك في الانتظار، سيتم إشعارك فور قبول مندوب لطلبك"}
                     </p>
 
                     <div style={{
-                        background: "white", borderRadius: "16px", padding: "20px 24px",
-                        boxShadow: "0 4px 20px rgba(0,0,0,0.08)", width: "100%", maxWidth: "380px",
+                        background: "var(--surface)",
+                        borderRadius: "16px",
+                        padding: "16px 18px 14px",
+                        boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+                        width: "100%",
+                        maxWidth: "min(440px, calc(100vw - 32px))",
                         textAlign: "right",
+                        display: "flex",
+                        flexDirection: "column",
+                        flex: "1 1 auto",
+                        minHeight: 0,
+                        overflow: "hidden",
                     }}>
-                        <div style={{ fontSize: "0.75rem", color: "#ff6b35", fontWeight: 700, marginBottom: "12px", letterSpacing: "0.05em" }}>
+                        <div style={{
+                            fontSize: "0.75rem",
+                            color: "#ea580c",
+                            fontWeight: 700,
+                            marginBottom: "8px",
+                            letterSpacing: "0.05em",
+                            flexShrink: 0,
+                        }}>
                             ملخص طلبك
                         </div>
-                        <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#1a1a2e", marginBottom: "12px" }}>
+                        <div style={{
+                            fontSize: "1.1rem",
+                            fontWeight: 800,
+                            color: "#1a1a2e",
+                            marginBottom: "10px",
+                            flexShrink: 0,
+                        }}>
                             #{orderNumber}
                         </div>
-                        {orderItems.map((item, i) => (
-                            <div key={i} style={{
-                                display: "flex", justifyContent: "space-between", alignItems: "center",
-                                padding: "8px 0", borderBottom: i < orderItems.length - 1 ? "1px solid #f1f5f9" : "none",
-                                fontSize: "0.92rem", color: "#334155",
-                            }}>
-                                <span style={{ background: "#fff0eb", color: "#ff6b35", borderRadius: "6px", padding: "2px 8px", fontSize: "0.8rem", fontWeight: 700 }}>
-                                    × {item.quantity}
-                                </span>
-                                <span>{item.name}</span>
-                            </div>
-                        ))}
+                        <div
+                            style={{
+                                flex: 1,
+                                minHeight: 0,
+                                overflowY: "auto",
+                                WebkitOverflowScrolling: "touch",
+                                overscrollBehavior: "contain",
+                                paddingInlineEnd: "4px",
+                                marginInlineEnd: "-2px",
+                            }}
+                        >
+                            {orderItems.map((item, i) => (
+                                <div key={i} style={{
+                                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                                    gap: "8px",
+                                    padding: "8px 0", borderBottom: i < orderItems.length - 1 ? "1px solid #f1f5f9" : "none",
+                                    fontSize: "0.92rem", color: "#334155",
+                                }}>
+                                    <span style={{
+                                        background: "#fff0eb",
+                                        color: "#ea580c",
+                                        borderRadius: "6px",
+                                        padding: "2px 8px",
+                                        fontSize: "0.8rem",
+                                        fontWeight: 700,
+                                        flexShrink: 0,
+                                    }}>
+                                        × {item.quantity}
+                                    </span>
+                                    <span style={{ textAlign: "right", wordBreak: "break-word", minWidth: 0 }}>{item.name}</span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
 
-                    <p style={{ marginTop: "24px", color: "#94a3b8", fontSize: "0.82rem" }}>
+                    <p style={{
+                        marginTop: "20px",
+                        color: "#94a3b8",
+                        fontSize: "0.82rem",
+                        flexShrink: 0,
+                        paddingInline: "8px",
+                    }}>
                         لا تغلق هذه الشاشة حتى يقبل المندوب طلبك
                     </p>
 
                     <button
+                        type="button"
                         onClick={cancelOrder}
                         style={{
-                            marginTop: "20px", padding: "12px 32px", borderRadius: "12px", border: "1.5px solid rgba(239, 68, 68, 0.4)",
-                            background: "rgba(239, 68, 68, 0.05)", color: "#ef4444", fontFamily: "inherit",
-                            fontWeight: 700, fontSize: "0.95rem", cursor: "pointer", transition: "all 0.2s"
+                            marginTop: "20px",
+                            padding: "12px 32px",
+                            borderRadius: "12px",
+                            border: "1.5px solid rgba(239, 68, 68, 0.4)",
+                            background: "rgba(239, 68, 68, 0.05)",
+                            color: "#ef4444",
+                            fontFamily: "inherit",
+                            fontWeight: 700,
+                            fontSize: "0.95rem",
+                            cursor: "pointer",
+                            transition: "all 0.2s",
+                            flexShrink: 0,
                         }}
                     >
                         إلغاء الطلب
                     </button>
+                    </div>
                 </div>
             )}
 
             {/* ── TRACKING SCREEN — Accepted ──────────────────────── */}
             {trackingStatus === "accepted" && driverInfo && (
                 <div style={{
-                    position: "fixed", inset: 0, background: "linear-gradient(135deg,#f0fdf4 0%,#fff 100%)",
+                    position: "fixed", inset: 0, background: "linear-gradient(135deg,#f0fdf4 0%,var(--surface) 100%)",
                     display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                     zIndex: 2000, padding: "24px", textAlign: "center", overflowY: "auto",
                 }}>
@@ -722,7 +987,7 @@ function CreateOrderContent() {
 
                     {/* Driver card */}
                     <div style={{
-                        background: "white", borderRadius: "20px", padding: "20px 18px",
+                        background: "var(--surface)", borderRadius: "20px", padding: "20px 18px",
                         boxShadow: "0 6px 26px rgba(0,0,0,0.08)", width: "100%", maxWidth: "420px",
                         textAlign: "right", marginBottom: "18px",
                     }}>
@@ -753,7 +1018,7 @@ function CreateOrderContent() {
 
                     {/* Order summary */}
                     <div style={{
-                        background: "white", borderRadius: "16px", padding: "20px 24px",
+                        background: "var(--surface)", borderRadius: "16px", padding: "20px 24px",
                         boxShadow: "0 4px 20px rgba(0,0,0,0.06)", width: "100%", maxWidth: "420px",
                         textAlign: "right", marginBottom: "22px",
                     }}>

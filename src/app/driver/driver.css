@@ -7,7 +7,7 @@
     --driver-accent: #10b981;
     --driver-dark: #0f172a;
     --driver-bg: #f1f5f9;
-    --driver-card: #ffffff;
+    --driver-card: #f9f9fa;
     --driver-text: #0f172a;
     --driver-text-muted: #64748b;
     --driver-border: #e2e8f0;
@@ -131,7 +131,7 @@ body.driver-app {
 /* Tab Switcher */
 .driver-tabs-container {
     padding: 12px 20px 8px;
-    background: white;
+    background: var(--driver-card);
     display: flex;
     justify-content: center;
     position: sticky;
@@ -283,7 +283,7 @@ body.driver-app {
 
 /* My Accepted Orders */
 .accepted-card {
-    background: white;
+    background: var(--driver-card);
     border-radius: 12px;
     box-shadow: var(--driver-shadow);
     border: 1px solid var(--driver-border);
@@ -326,7 +326,7 @@ body.driver-app {
 .empty-state {
     text-align: center;
     padding: 50px 20px;
-    background: white;
+    background: var(--driver-card);
     border-radius: 12px;
     border: 1px solid var(--driver-border);
 }
@@ -404,7 +404,7 @@ body.driver-app {
 }
 
 .modal-content {
-    background: white;
+    background: var(--driver-card);
     width: 100%;
     max-width: 600px;
     margin: 0;
@@ -459,7 +459,7 @@ body.driver-app {
 }
 
 .driver-profile-card {
-    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    background: linear-gradient(180deg, var(--driver-card) 0%, #f8fafc 100%);
     border: 1px solid var(--driver-border);
     border-radius: 12px;
     padding: 12px;
@@ -485,7 +485,7 @@ body.driver-app {
     gap: 8px;
     border: 1px solid var(--driver-border);
     border-radius: 10px;
-    background: #ffffff;
+    background: var(--driver-card);
     padding: 9px 10px;
 }
 
@@ -524,7 +524,7 @@ body.driver-app {
     font-family: inherit;
     font-size: 0.92rem;
     color: var(--driver-text);
-    background: #fff;
+    background: var(--driver-card);
 }
 
 .driver-settings-field input:focus {
@@ -619,7 +619,7 @@ body.driver-app {
 }
 
 .login-card {
-    background: white;
+    background: var(--driver-card);
     border-radius: 16px;
     padding: 36px 28px;
     width: 100%;
@@ -647,7 +647,7 @@ body.driver-app {
 }
 
 .login-input:focus {
-    background: white;
+    background: var(--driver-card);
     border-color: var(--driver-primary);
 }
 

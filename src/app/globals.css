@@ -15,16 +15,19 @@
   --primary-dark: #f05a28;
   --primary-light: #fff3ed;
   --primary-glow: rgba(255, 107, 53, 0.15);
+  /* أبيض حقيقي للنص فوق الألوان فقط */
   --white: #ffffff;
+  /* سطح الصفحات والبطاقات: أبيض مائل للرمادي بشكل خفيف جداً */
+  --surface: #f9f9fa;
   --text-dark: #1a1a2e;
   --text-mid: #444;
   --text-light: #777;
   --text-muted: #aaa;
-  --border: #e8e8e8;
-  --border-light: #f0f0f0;
-  --bg-page: #ffffff;
-  --bg-section: #fafafa;
-  --bg-light: #f5f5f5;
+  --border: #e3e4e6;
+  --border-light: #e6e7e9;
+  --bg-page: #f4f4f5;
+  --bg-section: #eeeff1;
+  --bg-light: #e8e9eb;
   --radius-sm: 12px;
   --radius-md: 16px;
   --radius-lg: 20px;
@@ -828,7 +831,7 @@ a {
 }
 
 .modal-box {
-  background: var(--white);
+  background: var(--surface);
   border-radius: var(--radius-xl);
   padding: 35px 25px;
   text-align: center;
@@ -1118,7 +1121,7 @@ body:has(.bottom-nav)>div:not(.bottom-nav) {
    Order Section Card (create-order page)
    ============================================ */
 .order-section-card {
-  background: white;
+  background: var(--surface);
   border-radius: var(--radius-lg);
   border: 1.5px solid var(--border-light);
   padding: 16px;
@@ -1283,7 +1286,7 @@ body:has(.bottom-nav)>div:not(.bottom-nav) {
 .order-textarea:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-glow);
-  background: white;
+  background: var(--surface);
 }
 
 .order-textarea::placeholder {
@@ -1357,6 +1360,79 @@ body:has(.bottom-nav)>div:not(.bottom-nav) {
   .order-confirm-btn:active {
     transform: scale(0.98);
   }
+}
+
+/* صفحة إنشاء الطلب: ملء الشاشة بدون سكرول للصفحة — التمرير داخل حقل الطلب فقط */
+.page-wrapper.create-order-page {
+  min-height: 0;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  width: 100%;
+}
+
+.create-order-page .create-order-content {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 520px;
+  padding: 8px 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.create-order-page .order-mode-toggle-wrap--above {
+  flex-shrink: 0;
+}
+
+.create-order-page .order-section-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.create-order-page .order-section-card--call {
+  flex: 0 0 auto;
+}
+
+.create-order-page .order-section-header {
+  flex-shrink: 0;
+}
+
+.create-order-page .order-write-label {
+  flex-shrink: 0;
+}
+
+.create-order-page .order-textarea-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.create-order-page .order-textarea {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  overflow-y: auto;
+}
+
+.create-order-page .order-hint {
+  flex-shrink: 0;
+}
+
+.create-order-page .create-order-submit-error {
+  flex-shrink: 0;
+}
+
+.create-order-page .order-confirm-btn {
+  flex-shrink: 0;
 }
 
 /* ============================================
@@ -1708,7 +1784,7 @@ body:has(.bottom-nav)>div:not(.bottom-nav) {
   min-height: 56px;
   padding: 14px 18px;
   border-radius: 14px;
-  background: #fff;
+  background: var(--surface);
   color: var(--primary-dark);
   font-size: 1.08rem;
   font-weight: 800;
@@ -1805,7 +1881,7 @@ body:has(.bottom-nav)>div:not(.bottom-nav) {
   border-radius: 14px;
   text-decoration: none;
   color: inherit;
-  background: #ffffff;
+  background: var(--surface);
   border: 1px solid var(--border-light);
   box-shadow: var(--shadow-sm);
   transition:
@@ -2117,7 +2193,7 @@ body:has(.bottom-nav)>div:not(.bottom-nav) {
   margin: 0;
   width: 100%;
   padding: 14px 14px;
-  background: #fff;
+  background: var(--surface);
   border: 1.5px solid var(--border-light);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
@@ -2219,7 +2295,7 @@ body:has(.bottom-nav)>div:not(.bottom-nav) {
 
 /* تم التوصيل — تمييز أخضر */
 .home-last-order--delivered {
-  background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 55%);
+  background: linear-gradient(135deg, #f0fdf4 0%, var(--surface) 55%);
   border-color: #a7f3d0;
   box-shadow: 0 2px 14px rgba(16, 185, 129, 0.12);
 }
@@ -2283,7 +2359,7 @@ body:has(.bottom-nav)>div:not(.bottom-nav) {
 }
 
 .home-action-card {
-  background: white;
+  background: var(--surface);
   border-radius: var(--radius-md);
   border: 1.5px solid var(--border-light);
   padding: 20px 10px 16px;
@@ -2344,7 +2420,7 @@ body:has(.bottom-nav)>div:not(.bottom-nav) {
   display: flex;
   align-items: center;
   gap: 14px;
-  background: white;
+  background: var(--surface);
   border: 1.5px solid var(--border-light);
   border-radius: var(--radius-sm);
   padding: 14px 16px;

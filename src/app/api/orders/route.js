@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuthUid } from "@/lib/serverAuth";
+import { DEFAULT_DELIVERY_FEE_SYP } from "@/lib/orderPricing";
 
 function generateOrderNumber() {
     const num = Math.floor(1000 + Math.random() * 9000);
@@ -57,6 +58,7 @@ export async function POST(request) {
             driverId: null,
             locationCoords: locationCoords || null,
             locationDesc: locationDesc?.trim() || "",
+            deliveryFeeSyp: DEFAULT_DELIVERY_FEE_SYP,
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
             expiresAt,

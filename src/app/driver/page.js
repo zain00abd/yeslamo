@@ -20,6 +20,7 @@ import { showAppAlert } from "@/lib/appAlert";
 import { showAppConfirm } from "@/lib/appConfirm";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import SwipeToAccept from "./SwipeToAccept";
+import { getDeliveryFeeForOrder } from "@/lib/orderPricing";
 import "./driver.css";
 
 // ─── Config ───────────────────────────────────────────────────────────────
@@ -212,6 +213,11 @@ export default function DriverDashboard() {
     const [callDetailsExpanded, setCallDetailsExpanded] = useState({});
     const [cancelModalOrder, setCancelModalOrder] = useState(null);
     const [cancelReason, setCancelReason] = useState(CANCEL_REASONS[0]);
+    const [verifyModalOrder, setVerifyModalOrder] = useState(null);
+    const [verifyModalCalled, setVerifyModalCalled] = useState(false);
+    const [onTheWayModalOrder, setOnTheWayModalOrder] = useState(null);
+    const [onTheWayPurchaseInput, setOnTheWayPurchaseInput] = useState("");
+    const [onTheWaySaving, setOnTheWaySaving] = useState(false);
     const callFlowStorageKey = user ? `yaslamo_driver_call_flow_${user.uid}` : null;
     const settingsStorageKey = user ? `yaslamo_driver_settings_${user.uid}` : null;
     const [driverSettings, setDriverSettings] = useState(DRIVER_SETTINGS_DEFAULT);
@@ -399,15 +405,18 @@ export default function DriverDashboard() {
             }
 
             showAppAlert(action === "verified" ? "✅ تم توثيق الزبون" : "🚫 تم الإبلاغ عن الزبون");
+            setVerifyModalOrder(null);
+            setVerifyModalCalled(false);
         } catch (err) {
             console.error("verify error:", err);
             showAppAlert("حدث خطأ");
         }
     }, []);
 
-    // ── Update order status (on_the_way / delivered) ───────────────────────
+    // ── Update order status (delivered only — «في الطريق» يمر عبر نافذة سعر المشتريات) ──
     const handleUpdateStatus = useCallback(async (orderId, newStatus) => {
-        const msg = newStatus === "on_the_way" ? "تحويل حالة الطلب إلى 'في الطريق'؟" : "هل أنت متأكد من تسليم الطلب للزبون بنجاح؟";
+        if (newStatus !== "delivered") return;
+        const msg = "هل أنت متأكد من تسليم الطلب للزبون بنجاح؟";
         showAppConfirm(msg).then(async (ok) => {
             if (!ok) return;
 
@@ -422,6 +431,42 @@ export default function DriverDashboard() {
             }
         });
     }, []);
+
+    const submitOnTheWayPricing = useCallback(async () => {
+        if (!onTheWayModalOrder) return;
+        const raw = String(onTheWayPurchaseInput).trim().replace(/,/g, ".");
+        const purchase = parseFloat(raw);
+        if (Number.isNaN(purchase) || purchase < 0) {
+            showAppAlert("أدخل مبلغاً صحيحاً لمشتريات الطلب");
+            return;
+        }
+        const deliveryFeeSyp = getDeliveryFeeForOrder(onTheWayModalOrder);
+        const totalDueSyp = Math.round((purchase + deliveryFeeSyp) * 100) / 100;
+        setOnTheWaySaving(true);
+        try {
+            await updateDoc(doc(db, "orders", onTheWayModalOrder.id), {
+                status: "on_the_way",
+                itemsPurchaseSyp: purchase,
+                deliveryFeeSyp,
+                totalDueSyp,
+                updatedAt: serverTimestamp(),
+            });
+            setOnTheWayModalOrder(null);
+            setOnTheWayPurchaseInput("");
+        } catch (err) {
+            console.error("on the way pricing error:", err);
+            showAppAlert("حدث خطأ أثناء حفظ السعر أو تحديث الحالة");
+        } finally {
+            setOnTheWaySaving(false);
+        }
+    }, [onTheWayModalOrder, onTheWayPurchaseInput]);
+
+    const onTheWayFeePreview = onTheWayModalOrder ? getDeliveryFeeForOrder(onTheWayModalOrder) : 0;
+    const onTheWayPurchasePreview = Math.max(
+        0,
+        parseFloat(String(onTheWayPurchaseInput).trim().replace(/,/g, ".")) || 0
+    );
+    const onTheWayTotalPreview = Math.round((onTheWayPurchasePreview + onTheWayFeePreview) * 100) / 100;
 
     const handleCancelOrder = useCallback(async () => {
         if (!cancelModalOrder) return;
@@ -625,8 +670,71 @@ export default function DriverDashboard() {
                                                     <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
                                                 </svg>
                                             </div>
-                                            <div>
-                                                <div style={{ fontWeight: 700, fontSize: "1.05rem", color: "var(--driver-text)", marginBottom: "2px" }}>{order.customerName}</div>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginBottom: "2px" }}>
+                                                    <span style={{ fontWeight: 700, fontSize: "1.05rem", color: "var(--driver-text)" }}>{order.customerName}</span>
+                                                    {order.customerStatus === "verified" && (
+                                                        <span
+                                                            title="موثّق"
+                                                            style={{
+                                                                display: "inline-flex",
+                                                                alignItems: "center",
+                                                                justifyContent: "center",
+                                                                width: "16px",
+                                                                height: "16px",
+                                                                borderRadius: "50%",
+                                                                background: "#059669",
+                                                                color: "white",
+                                                                fontSize: "10px",
+                                                                fontWeight: 900,
+                                                                lineHeight: 1,
+                                                                flexShrink: 0,
+                                                            }}
+                                                            aria-label="موثّق"
+                                                        >
+                                                            ✓
+                                                        </span>
+                                                    )}
+                                                    {order.customerStatus === "flagged" && (
+                                                        <span
+                                                            style={{
+                                                                fontSize: "0.62rem",
+                                                                fontWeight: 800,
+                                                                padding: "1px 5px",
+                                                                borderRadius: "4px",
+                                                                background: "#fff7ed",
+                                                                color: "#c2410c",
+                                                                border: "1px solid #fed7aa",
+                                                                flexShrink: 0,
+                                                            }}
+                                                        >
+                                                            مبلّغ
+                                                        </span>
+                                                    )}
+                                                    {!order.customerStatus && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setVerifyModalOrder(order);
+                                                                setVerifyModalCalled(false);
+                                                            }}
+                                                            style={{
+                                                                fontSize: "0.62rem",
+                                                                fontWeight: 800,
+                                                                padding: "2px 6px",
+                                                                borderRadius: "4px",
+                                                                background: "#fef2f2",
+                                                                color: "#dc2626",
+                                                                border: "1px solid #fecaca",
+                                                                cursor: "pointer",
+                                                                lineHeight: 1.25,
+                                                                fontFamily: "inherit",
+                                                            }}
+                                                        >
+                                                            غير موثق
+                                                        </button>
+                                                    )}
+                                                </div>
                                                 <a href={`tel:${order.customerPhone}`} style={{ color: "var(--driver-primary)", fontWeight: 600, fontSize: "0.88rem", textDecoration: "none", display: "flex", alignItems: "center", gap: "4px" }} dir="ltr">
                                                     <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
                                                     {order.customerPhone}
@@ -773,7 +881,11 @@ export default function DriverDashboard() {
                                                     isCallExpanded ? (
                                                         order.status === "accepted" ? (
                                                             <button
-                                                                onClick={() => handleUpdateStatus(order.id, "on_the_way")}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setOnTheWayModalOrder(order);
+                                                                    setOnTheWayPurchaseInput("");
+                                                                }}
                                                                 style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "none", background: "#2563eb", color: "white", fontFamily: "inherit", fontWeight: 700, fontSize: "0.95rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
                                                             >
                                                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
@@ -804,7 +916,11 @@ export default function DriverDashboard() {
                                                 ) : null
                                             ) : order.status === "accepted" && (
                                                 <button
-                                                    onClick={() => handleUpdateStatus(order.id, "on_the_way")}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setOnTheWayModalOrder(order);
+                                                        setOnTheWayPurchaseInput("");
+                                                    }}
                                                     style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "none", background: "#2563eb", color: "white", fontFamily: "inherit", fontWeight: 700, fontSize: "0.95rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
                                                 >
                                                     <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
@@ -813,6 +929,7 @@ export default function DriverDashboard() {
                                             )}
                                             {order.status === "on_the_way" && (
                                                 <button
+                                                    type="button"
                                                     onClick={() => handleUpdateStatus(order.id, "delivered")}
                                                     style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "none", background: "#059669", color: "white", fontFamily: "inherit", fontWeight: 700, fontSize: "0.95rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
                                                 >
@@ -822,19 +939,48 @@ export default function DriverDashboard() {
                                             )}
                                         </div>
 
-                                        {/* Verification: only shown when customerStatus is NOT set */}
-                                        {!order.customerStatus && (
-                                            <div style={{ marginTop: "12px", background: "#fef2f2", borderRadius: "8px", padding: "12px", border: "1px solid #fecaca" }}>
-                                                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
-                                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="#b91c1c"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
-                                                    <span style={{ fontWeight: 700, color: "#b91c1c", fontSize: "0.88rem" }}>تأكيد حالة الزبون</span>
+                                        {(order.status === "on_the_way" || order.status === "delivered") &&
+                                            typeof order.itemsPurchaseSyp === "number" && (
+                                                <div
+                                                    style={{
+                                                        marginTop: "12px",
+                                                        padding: "12px 14px",
+                                                        borderRadius: "10px",
+                                                        border: "1px solid var(--driver-border)",
+                                                        background: "var(--driver-bg)",
+                                                    }}
+                                                >
+                                                    <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "var(--driver-text-muted)", marginBottom: "8px" }}>تفاصيل السعر للزبون</div>
+                                                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", fontWeight: 700, color: "var(--driver-text)", marginBottom: "4px" }}>
+                                                        <span>مشتريات الطلب</span>
+                                                        <span style={{ fontVariantNumeric: "tabular-nums" }}>{order.itemsPurchaseSyp} ل.س</span>
+                                                    </div>
+                                                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", fontWeight: 700, color: "var(--driver-text)", marginBottom: "8px" }}>
+                                                        <span>رسوم التوصيل</span>
+                                                        <span style={{ fontVariantNumeric: "tabular-nums" }}>{getDeliveryFeeForOrder(order)} ل.س</span>
+                                                    </div>
+                                                    <div
+                                                        style={{
+                                                            display: "flex",
+                                                            justifyContent: "space-between",
+                                                            alignItems: "center",
+                                                            paddingTop: "8px",
+                                                            borderTop: "1px dashed var(--driver-border)",
+                                                            fontSize: "0.95rem",
+                                                            fontWeight: 900,
+                                                            color: "var(--driver-primary)",
+                                                        }}
+                                                    >
+                                                        <span>الإجمالي</span>
+                                                        <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                                                            {typeof order.totalDueSyp === "number"
+                                                                ? order.totalDueSyp
+                                                                : order.itemsPurchaseSyp + getDeliveryFeeForOrder(order)}{" "}
+                                                            ل.س
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                                <div style={{ display: "flex", gap: "8px" }}>
-                                                    <button onClick={() => handleVerifyCustomer(order, "verified")} style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "none", background: "#059669", color: "white", fontFamily: "inherit", fontWeight: 700, fontSize: "0.88rem", cursor: "pointer" }}>حقيقي</button>
-                                                    <button onClick={() => handleVerifyCustomer(order, "flagged")} style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "none", background: "#dc2626", color: "white", fontFamily: "inherit", fontWeight: 700, fontSize: "0.88rem", cursor: "pointer" }}>احتيال</button>
-                                                </div>
-                                            </div>
-                                        )}
+                                            )}
                                     </div>
                                             </>
                                         );
@@ -852,6 +998,288 @@ export default function DriverDashboard() {
                 onAccept={handleAcceptOrder}
                 isAccepting={isAccepting}
             />
+
+            {onTheWayModalOrder && (
+                    <div
+                        className="modal-overlay"
+                        onClick={() => {
+                            if (onTheWaySaving) return;
+                            setOnTheWayModalOrder(null);
+                            setOnTheWayPurchaseInput("");
+                        }}
+                    >
+                        <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "420px" }}>
+                            <div className="modal-header">
+                                <div className="modal-title">تأكيد «في الطريق»</div>
+                                <button
+                                    type="button"
+                                    className="close-btn"
+                                    disabled={onTheWaySaving}
+                                    onClick={() => {
+                                        setOnTheWayModalOrder(null);
+                                        setOnTheWayPurchaseInput("");
+                                    }}
+                                >
+                                    <svg viewBox="0 0 24 24" width="22" height="22" fill="#64748b">
+                                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <p style={{ fontSize: "0.88rem", color: "var(--driver-text-muted)", lineHeight: 1.65, marginBottom: "12px", fontWeight: 600 }}>
+                                أدخل المبلغ الذي دفعته لشراء محتوى الطلب فقط{" "}
+                                <strong style={{ color: "var(--driver-text)" }}>دون احتساب رسوم التوصيل</strong>. سيظهر للزبون الإجمالي مع التوصيل.
+                            </p>
+                            <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 800, color: "var(--driver-text-muted)", marginBottom: "6px" }}>
+                                مبلغ المشتريات (ل.س جديدة)
+                            </label>
+                            <input
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                step="any"
+                                autoFocus
+                                value={onTheWayPurchaseInput}
+                                onChange={(e) => setOnTheWayPurchaseInput(e.target.value)}
+                                placeholder="0"
+                                disabled={onTheWaySaving}
+                                style={{
+                                    width: "100%",
+                                    padding: "12px 14px",
+                                    borderRadius: "10px",
+                                    border: "1px solid var(--driver-border)",
+                                    fontSize: "1.1rem",
+                                    fontWeight: 800,
+                                    fontVariantNumeric: "tabular-nums",
+                                    marginBottom: "12px",
+                                    fontFamily: "inherit",
+                                    boxSizing: "border-box",
+                                }}
+                            />
+                            <div
+                                style={{
+                                    padding: "12px 14px",
+                                    borderRadius: "10px",
+                                    background: "var(--driver-bg)",
+                                    border: "1px solid var(--driver-border)",
+                                    marginBottom: "14px",
+                                }}
+                            >
+                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.86rem", fontWeight: 700, marginBottom: "6px" }}>
+                                    <span style={{ color: "var(--driver-text-muted)" }}>رسوم التوصيل (ثابتة)</span>
+                                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{onTheWayFeePreview} ل.س</span>
+                                </div>
+                                <div
+                                    style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        fontSize: "1rem",
+                                        fontWeight: 900,
+                                        color: "var(--driver-primary)",
+                                        paddingTop: "8px",
+                                        borderTop: "1px dashed var(--driver-border)",
+                                    }}
+                                >
+                                    <span>يُعرض للزبون — الإجمالي</span>
+                                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{onTheWayTotalPreview} ل.س</span>
+                                </div>
+                            </div>
+                            <div style={{ display: "flex", gap: "8px" }}>
+                                <button
+                                    type="button"
+                                    disabled={onTheWaySaving}
+                                    onClick={() => {
+                                        setOnTheWayModalOrder(null);
+                                        setOnTheWayPurchaseInput("");
+                                    }}
+                                    style={{
+                                        flex: 1,
+                                        padding: "12px",
+                                        borderRadius: "10px",
+                                        border: "1px solid var(--driver-border)",
+                                        background: "var(--surface)",
+                                        fontFamily: "inherit",
+                                        fontWeight: 800,
+                                        cursor: onTheWaySaving ? "wait" : "pointer",
+                                    }}
+                                >
+                                    إلغاء
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={onTheWaySaving}
+                                    onClick={submitOnTheWayPricing}
+                                    style={{
+                                        flex: 1,
+                                        padding: "12px",
+                                        borderRadius: "10px",
+                                        border: "none",
+                                        background: "#2563eb",
+                                        color: "white",
+                                        fontFamily: "inherit",
+                                        fontWeight: 800,
+                                        cursor: onTheWaySaving ? "wait" : "pointer",
+                                        opacity: onTheWaySaving ? 0.85 : 1,
+                                    }}
+                                >
+                                    {onTheWaySaving ? "جاري الحفظ..." : "تأكيد"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+            )}
+
+            {verifyModalOrder && (
+                <div
+                    className="modal-overlay"
+                    onClick={() => {
+                        setVerifyModalOrder(null);
+                        setVerifyModalCalled(false);
+                    }}
+                >
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "400px" }}>
+                        <div className="modal-header">
+                            <div className="modal-title">توثيق الزبون</div>
+                            <button
+                                type="button"
+                                className="close-btn"
+                                onClick={() => {
+                                    setVerifyModalOrder(null);
+                                    setVerifyModalCalled(false);
+                                }}
+                            >
+                                <svg viewBox="0 0 24 24" width="22" height="22" fill="#64748b">
+                                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        {!verifyModalCalled ? (
+                            <>
+                                <p style={{ fontSize: "0.88rem", color: "var(--driver-text-muted)", lineHeight: 1.65, marginBottom: "14px", fontWeight: 600 }}>
+                                    اضغط للاتصال بالزبون، ثم أكمل التوثيق في الخطوة التالية.
+                                </p>
+                                <a
+                                    href={`tel:${verifyModalOrder.customerPhone}`}
+                                    onClick={() => setVerifyModalCalled(true)}
+                                    style={{
+                                        width: "100%",
+                                        padding: "12px 14px",
+                                        borderRadius: "10px",
+                                        border: "none",
+                                        background: "#16a34a",
+                                        color: "white",
+                                        fontFamily: "inherit",
+                                        fontWeight: 800,
+                                        fontSize: "0.95rem",
+                                        textDecoration: "none",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        gap: "8px",
+                                        boxShadow: "0 6px 14px rgba(22, 163, 74, 0.28)",
+                                    }}
+                                >
+                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden>
+                                        <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+                                    </svg>
+                                    الاتصال بالزبون
+                                </a>
+                                <button
+                                    type="button"
+                                    onClick={() => setVerifyModalCalled(true)}
+                                    style={{
+                                        width: "100%",
+                                        marginTop: "10px",
+                                        padding: "8px",
+                                        border: "none",
+                                        background: "transparent",
+                                        color: "var(--driver-primary)",
+                                        fontWeight: 800,
+                                        fontSize: "0.8rem",
+                                        cursor: "pointer",
+                                        fontFamily: "inherit",
+                                        textDecoration: "underline",
+                                    }}
+                                >
+                                    أكملت الاتصال — متابعة التوثيق
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <p style={{ fontSize: "0.86rem", color: "var(--driver-text-muted)", lineHeight: 1.6, marginBottom: "12px", fontWeight: 600 }}>
+                                    بعد التواصل، اختر أحد الخيارين ثم اضغط <strong style={{ color: "var(--driver-text)" }}>تأكيد</strong> بجانبه.
+                                </p>
+                                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                    <div
+                                        style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "space-between",
+                                            gap: "10px",
+                                            padding: "10px 12px",
+                                            borderRadius: "10px",
+                                            border: "1px solid var(--driver-border)",
+                                            background: "var(--driver-bg)",
+                                        }}
+                                    >
+                                        <span style={{ fontWeight: 800, fontSize: "0.9rem", color: "var(--driver-text)" }}>حقيقي</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleVerifyCustomer(verifyModalOrder, "verified")}
+                                            style={{
+                                                padding: "8px 18px",
+                                                borderRadius: "8px",
+                                                border: "none",
+                                                background: "#059669",
+                                                color: "white",
+                                                fontFamily: "inherit",
+                                                fontWeight: 800,
+                                                fontSize: "0.82rem",
+                                                cursor: "pointer",
+                                                flexShrink: 0,
+                                            }}
+                                        >
+                                            تأكيد
+                                        </button>
+                                    </div>
+                                    <div
+                                        style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "space-between",
+                                            gap: "10px",
+                                            padding: "10px 12px",
+                                            borderRadius: "10px",
+                                            border: "1px solid rgba(220, 38, 38, 0.35)",
+                                            background: "rgba(254, 242, 242, 0.6)",
+                                        }}
+                                    >
+                                        <span style={{ fontWeight: 800, fontSize: "0.9rem", color: "#b91c1c" }}>إبلاغ</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleVerifyCustomer(verifyModalOrder, "flagged")}
+                                            style={{
+                                                padding: "8px 18px",
+                                                borderRadius: "8px",
+                                                border: "1.5px solid #dc2626",
+                                                background: "white",
+                                                color: "#dc2626",
+                                                fontFamily: "inherit",
+                                                fontWeight: 800,
+                                                fontSize: "0.82rem",
+                                                cursor: "pointer",
+                                                flexShrink: 0,
+                                            }}
+                                        >
+                                            تأكيد
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {cancelModalOrder && (
                 <div className="modal-overlay" onClick={() => setCancelModalOrder(null)}>
@@ -876,7 +1304,7 @@ export default function DriverDashboard() {
                                         padding: "10px 12px",
                                         borderRadius: "10px",
                                         border: "1px solid var(--driver-border)",
-                                        background: cancelReason === reason ? "rgba(30, 58, 95, 0.06)" : "white",
+                                        background: cancelReason === reason ? "rgba(30, 58, 95, 0.06)" : "var(--surface)",
                                         cursor: "pointer",
                                         fontWeight: 600,
                                         color: "var(--driver-text)",
@@ -896,7 +1324,7 @@ export default function DriverDashboard() {
                         <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
                             <button
                                 onClick={() => setCancelModalOrder(null)}
-                                style={{ flex: 1, padding: "11px", borderRadius: "8px", border: "1px solid var(--driver-border)", background: "white", color: "var(--driver-text)", fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}
+                                style={{ flex: 1, padding: "11px", borderRadius: "8px", border: "1px solid var(--driver-border)", background: "var(--surface)", color: "var(--driver-text)", fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}
                             >
                                 رجوع
                             </button>
