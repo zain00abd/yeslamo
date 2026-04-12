@@ -38,7 +38,7 @@ service cloud.firestore {
       // لا يُسمح بتعديل الرصيد أو الدور من العميل — يمر عبر API الإدارة / قبول الطلب من السيرفر
       allow update: if isSignedIn() && (
         (request.auth.uid == userId
-          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['walletBalanceSyp', 'role']))
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['walletBalanceSyp', 'role', 'driverAccountNumber']))
         ||
         (isDriver()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['customerStatus']))

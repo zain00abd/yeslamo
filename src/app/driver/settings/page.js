@@ -30,6 +30,8 @@ export default function DriverSettingsPage() {
     const [installPrompt, setInstallPrompt] = useState(null);
     const [isInstalled, setIsInstalled] = useState(false);
     const [walletBalanceSyp, setWalletBalanceSyp] = useState(null);
+    /** رقم الحساب للاستعلام وشحن الرصيد (من الإدارة) */
+    const [driverAccountNumber, setDriverAccountNumber] = useState(null);
 
     const settingsStorageKey = user ? `yaslamo_driver_settings_${user.uid}` : null;
 
@@ -105,8 +107,10 @@ export default function DriverSettingsPage() {
                     setWalletBalanceSyp(0);
                     return;
                 }
-                const w = snap.data().walletBalanceSyp;
+                const data = snap.data();
+                const w = data.walletBalanceSyp;
                 setWalletBalanceSyp(typeof w === "number" && !Number.isNaN(w) ? w : 0);
+                setDriverAccountNumber(typeof data.driverAccountNumber === "string" ? data.driverAccountNumber : "");
             },
             (err) => console.error("wallet snapshot:", err)
         );
@@ -231,6 +235,34 @@ export default function DriverSettingsPage() {
                     <div style={{ fontSize: "1.65rem", fontWeight: 900, color: "var(--driver-primary)", fontVariantNumeric: "tabular-nums" }}>
                         {walletBalanceSyp === null ? "…" : `${walletBalanceSyp} ل.س`}
                     </div>
+                    {driverAccountNumber ? (
+                        <div
+                            style={{
+                                marginTop: "14px",
+                                paddingTop: "14px",
+                                borderTop: "1px dashed var(--driver-border)",
+                            }}
+                        >
+                            <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--driver-text-muted)", marginBottom: "6px" }}>
+                                رقم حساب المندوب (للاستعلام وشحن الرصيد)
+                            </div>
+                            <div
+                                dir="ltr"
+                                style={{
+                                    fontSize: "1.2rem",
+                                    fontWeight: 900,
+                                    letterSpacing: "0.06em",
+                                    color: "var(--driver-primary)",
+                                    fontVariantNumeric: "tabular-nums",
+                                }}
+                            >
+                                {driverAccountNumber}
+                            </div>
+                            <p style={{ fontSize: "0.78rem", color: "var(--driver-text-muted)", marginTop: "8px", lineHeight: 1.5, fontWeight: 600 }}>
+                                أعطِ هذا الرقم لإدارة يسلمو عند طلب شحن رصيدك أو الاستعلام عن حسابك.
+                            </p>
+                        </div>
+                    ) : null}
                     <p style={{ fontSize: "0.82rem", color: "var(--driver-text-muted)", marginTop: "12px", lineHeight: 1.55, fontWeight: 600 }}>
                         عند قبول أي طلب يُخصم تلقائياً <strong style={{ color: "var(--driver-text)" }}>{Math.round(DRIVER_DELIVERY_COMMISSION_RATE * 100)}%</strong> من{" "}
                         <strong style={{ color: "var(--driver-text)" }}>رسوم التوصيل</strong> للطلب (وليس من ثمن البضاعة). لشحن الرصيد أو الاستفسار، تواصل مع إدارة يسلمو.

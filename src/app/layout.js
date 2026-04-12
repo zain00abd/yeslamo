@@ -1,5 +1,5 @@
 import "./globals.css";
-import BottomNav from "./components/BottomNav";
+import ConditionalBottomNav from "./components/ConditionalBottomNav";
 import PwaRegister from "./components/PwaRegister";
 import AppAlertHost from "./components/AppAlertHost";
 
@@ -41,7 +41,7 @@ export default function RootLayout({ children }) {
         <PwaRegister />
         <AppAlertHost />
         {children}
-        <BottomNav />
+        <ConditionalBottomNav />
       </body>
     </html>
   );
