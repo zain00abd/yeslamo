@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { signAdminSession, COOKIE_NAME } from "@/lib/auth/admin-session";
-import { rateLimit } from "@/lib/rateLimit";
+import { rateLimit, getClientIp } from "@/lib/rateLimit";
 
 export async function POST(request) {
-    // Rate limit: max 10 attempts per IP per 15 minutes
-    const ip =
-        request.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
-        request.headers.get("x-real-ip") ||
-        "unknown";
+    const ip = getClientIp(request);
     const rl = rateLimit(`admin-session:${ip}`, 10, 15 * 60_000);
     if (!rl.allowed) {
         return NextResponse.json(
@@ -60,7 +56,7 @@ export async function POST(request) {
             secure: process.env.NODE_ENV === "production",
             sameSite: "lax",
             path: "/",
-            maxAge: 60 * 60 * 24 * 7,
+            maxAge: 60 * 60 * 24,
         });
         return res;
     } catch (e) {

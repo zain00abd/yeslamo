@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyAdminSessionToken } from "./admin-session";
+import { adminDb } from "@/lib/firebase-admin";
 
 /**
  * @param {import("next/server").NextRequest} request
@@ -12,6 +13,12 @@ export async function requireAdmin(request) {
     }
     try {
         const { uid } = await verifyAdminSessionToken(token);
+
+        const userSnap = await adminDb.collection("users").doc(uid).get();
+        if (!userSnap.exists || userSnap.data()?.role !== "admin") {
+            return { error: NextResponse.json({ error: "تم إلغاء صلاحيات المسؤول" }, { status: 403 }) };
+        }
+
         return { admin: { uid } };
     } catch {
         return { error: NextResponse.json({ error: "جلسة غير صالحة" }, { status: 401 }) };

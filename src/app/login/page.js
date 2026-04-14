@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 
@@ -24,14 +24,28 @@ export default function Login() {
 
         setLoading(true);
         try {
-            // 1. Sign in via Firebase Auth (single network call)
+            // 1. Check server-side rate limit before attempting Firebase Auth
+            const rlRes = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ phone: phone.trim() }),
+            });
+            if (!rlRes.ok) {
+                const rlData = await rlRes.json().catch(() => ({}));
+                setError(rlData.error || "حدث خطأ في تسجيل الدخول");
+                setLoading(false);
+                return;
+            }
+
+            // 2. Sign in via Firebase Auth
             const email = `${phone.trim().replace(/\s/g, "")}@yaslamo.app`;
             const cred = await signInWithEmailAndPassword(auth, email, password);
 
-            // 2. Fetch profile directly from Firestore client-side (fast, no API roundtrip)
+            // 3. Fetch profile from Firestore
             const profileSnap = await getDoc(doc(db, "users", cred.user.uid));
 
             if (!profileSnap.exists()) {
+                await signOut(auth);
                 setError("الملف الشخصي غير موجود");
                 setLoading(false);
                 return;
@@ -39,7 +53,6 @@ export default function Login() {
 
             const profile = profileSnap.data();
 
-            // Save app session to localStorage
             localStorage.setItem("yaslamo_user", JSON.stringify({
                 id: cred.user.uid,
                 name: profile.name,
@@ -52,13 +65,18 @@ export default function Login() {
                 customerStatus: profile.customerStatus || null,
                 role: profile.role || "customer",
             }));
+            window.dispatchEvent(new Event("yaslamo_auth"));
             router.push("/home");
         } catch (err) {
             console.error(err);
-            if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
+            if (
+                err.code === "auth/invalid-credential" ||
+                err.code === "auth/wrong-password" ||
+                err.code === "auth/user-not-found"
+            ) {
                 setError("رقم الهاتف أو كلمة السر غير صحيحة");
-            } else if (err.code === "auth/user-not-found") {
-                setError("رقم الهاتف غير مسجل");
+            } else if (err.code === "auth/too-many-requests") {
+                setError("محاولات كثيرة. حاول مجدداً بعد قليل");
             } else {
                 setError("حدث خطأ في تسجيل الدخول");
             }

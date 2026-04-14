@@ -108,7 +108,6 @@ export default function Register() {
                     body: JSON.stringify({
                         id: userId,
                         name: name.trim(),
-                        phone: phone.trim(),
                         address,
                         city: city.trim(),
                         locationDesc: locationDesc.trim(),

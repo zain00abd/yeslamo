@@ -15,7 +15,7 @@ export async function signAdminSession(uid) {
     return new SignJWT({ sub: uid, role: "admin" })
         .setProtectedHeader({ alg: "HS256" })
         .setIssuedAt()
-        .setExpirationTime("7d")
+        .setExpirationTime("24h")
         .sign(getSecret());
 }
 

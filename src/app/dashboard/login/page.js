@@ -23,6 +23,19 @@ export default function AdminLoginPage() {
         }
         setLoading(true);
         try {
+            // Pre-check rate limit on server before attempting Firebase Auth
+            const rlRes = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ phone: phone.trim() }),
+            });
+            if (!rlRes.ok) {
+                const rlData = await rlRes.json().catch(() => ({}));
+                setError(rlData.error || "حدث خطأ");
+                setLoading(false);
+                return;
+            }
+
             const email = `${phone.trim().replace(/\s/g, "")}@yaslamo.app`;
             const cred = await signInWithEmailAndPassword(auth, email, password);
             const profileSnap = await getDoc(doc(db, "users", cred.user.uid));
@@ -56,8 +69,14 @@ export default function AdminLoginPage() {
             router.refresh();
         } catch (err) {
             console.error(err);
-            if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
+            if (
+                err.code === "auth/invalid-credential" ||
+                err.code === "auth/wrong-password" ||
+                err.code === "auth/user-not-found"
+            ) {
                 setError("رقم الهاتف أو كلمة السر غير صحيحة");
+            } else if (err.code === "auth/too-many-requests") {
+                setError("محاولات كثيرة. حاول مجدداً بعد قليل");
             } else {
                 setError("حدث خطأ في تسجيل الدخول");
             }

@@ -2,30 +2,30 @@ import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuthUid } from "@/lib/serverAuth";
+import { validateProfileUpdatePayload } from "@/lib/auth/profileValidation";
 
 export async function POST(request) {
     try {
         const { uid: authUid, error: authError } = await requireAuthUid(request);
         if (authError) return authError;
 
-        const { id, name, address, city, locationDesc, locationCoords } = await request.json();
-
-        if (!id) {
-            return NextResponse.json({ error: "المعرف مطلوب" }, { status: 400 });
+        let body;
+        try {
+            body = await request.json();
+        } catch {
+            return NextResponse.json({ error: "جسم الطلب غير صالح" }, { status: 400 });
         }
+
+        const validated = validateProfileUpdatePayload(body);
+        if (validated.error) {
+            return NextResponse.json({ error: validated.error }, { status: 400 });
+        }
+
+        const { id, updateData } = validated.data;
         if (id !== authUid) {
             return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
         }
-
-        const updateData = {
-            updatedAt: FieldValue.serverTimestamp(),
-        };
-
-        if (name) updateData.name = name.trim();
-        if (address) updateData.address = address.trim();
-        if (city !== undefined) updateData.city = city?.trim() || "";
-        if (locationDesc !== undefined) updateData.locationDesc = locationDesc?.trim() || "";
-        if (locationCoords !== undefined) updateData.locationCoords = locationCoords || null;
+        updateData.updatedAt = FieldValue.serverTimestamp();
 
         const docRef = adminDb.collection("users").doc(id);
         const existingDoc = await docRef.get();
