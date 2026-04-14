@@ -1,8 +1,25 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { signAdminSession, COOKIE_NAME } from "@/lib/auth/admin-session";
+import { rateLimit } from "@/lib/rateLimit";
 
 export async function POST(request) {
+    // Rate limit: max 10 attempts per IP per 15 minutes
+    const ip =
+        request.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+        request.headers.get("x-real-ip") ||
+        "unknown";
+    const rl = rateLimit(`admin-session:${ip}`, 10, 15 * 60_000);
+    if (!rl.allowed) {
+        return NextResponse.json(
+            { error: "محاولات كثيرة. حاول مجدداً بعد قليل" },
+            {
+                status: 429,
+                headers: { "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)) },
+            }
+        );
+    }
+
     let body;
     try {
         body = await request.json();
