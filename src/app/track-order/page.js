@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { Bike } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { getCurrentUserIdToken } from "@/lib/clientAuth";
 import { showAppAlert } from "@/lib/appAlert";
 import { showAppConfirm } from "@/lib/appConfirm";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { getDeliveryFeeForOrder } from "@/lib/orderPricing";
+import { syncOrderStatusNotification } from "@/lib/customerNotifications";
 
 // Status config — order from RIGHT to LEFT in the stepper (RTL)
 const STEPS = [
@@ -17,8 +19,8 @@ const STEPS = [
         key: "delivered",
         label: "تم التوصيل",
         icon: (
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6 9 17l-5-5" />
             </svg>
         ),
     },
@@ -26,17 +28,16 @@ const STEPS = [
         key: "on_the_way",
         label: "في الطريق",
         icon: (
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-                <path d="M18 18.5c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-12 0c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm14-6.5v3h-2v-3h-3v-2h3V7h2v3h3v2h-3zm-16.5-2H6.5V7H4v4.5z" />
-            </svg>
+            <Bike size={22} strokeWidth={2} />
         ),
     },
     {
         key: "preparing",
         label: "قيد التحضير",
         icon: (
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-                <path d="M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z" />
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
             </svg>
         ),
     },
@@ -68,6 +69,32 @@ export default function MyOrderPage() {
     const [loading, setLoading] = useState(true);
     const [cancelling, setCancelling] = useState(false);
     const unsubRef = useRef(null);
+    const prevStatusRef = useRef(null);
+
+    const startListener = useCallback((orderId) => {
+        if (unsubRef.current) unsubRef.current();
+        const unsub = onSnapshot(doc(db, "orders", orderId), (snap) => {
+            if (!snap.exists()) return;
+            const data = snap.data();
+            const nextStatus = data.status || null;
+            const prevStatus = prevStatusRef.current;
+            if (nextStatus && prevStatus && nextStatus !== prevStatus) {
+                syncOrderStatusNotification({
+                    id: orderId,
+                    orderNumber: data.orderNumber || null,
+                    status: nextStatus,
+                });
+            }
+            prevStatusRef.current = nextStatus;
+            setOrder((prev) => ({
+                ...prev,
+                ...data,
+                createdAt: data.createdAt?.toDate?.()?.toISOString() || prev?.createdAt,
+                updatedAt: data.updatedAt?.toDate?.()?.toISOString() || prev?.updatedAt,
+            }));
+        });
+        unsubRef.current = unsub;
+    }, []);
 
     // انتظار جلسة Firebase Auth قبل مستمع Firestore (تجنّب permission-denied عند تحميل الصفحة)
     useEffect(() => {
@@ -118,6 +145,7 @@ export default function MyOrderPage() {
                 if (cancelled) return;
                 if (data.order) {
                     setOrder(data.order);
+                    prevStatusRef.current = data.order.status || null;
                     startListener(data.order.id);
                 }
             } catch (e) {
@@ -131,22 +159,7 @@ export default function MyOrderPage() {
             cancelled = true;
             if (unsubRef.current) unsubRef.current();
         };
-    }, [router]);
-
-    function startListener(orderId) {
-        if (unsubRef.current) unsubRef.current();
-        const unsub = onSnapshot(doc(db, "orders", orderId), (snap) => {
-            if (!snap.exists()) return;
-            const data = snap.data();
-            setOrder((prev) => ({
-                ...prev,
-                ...data,
-                createdAt: data.createdAt?.toDate?.()?.toISOString() || prev?.createdAt,
-                updatedAt: data.updatedAt?.toDate?.()?.toISOString() || prev?.updatedAt,
-            }));
-        });
-        unsubRef.current = unsub;
-    }
+    }, [router, startListener]);
 
     async function handleCancel() {
         if (!order?.id) return;
@@ -257,32 +270,45 @@ export default function MyOrderPage() {
             <div style={{ width: "100%", maxWidth: 600, margin: "0 auto", padding: "16px 16px 24px" }}>
 
                 {/* ── Status Stepper ── */}
-                <div style={{ background: "var(--surface)", borderRadius: "20px", padding: "20px 16px", marginBottom: 12, boxShadow: "0 2px 16px rgba(0,0,0,0.06)" }}>
+                <div style={{ background: "var(--surface)", borderRadius: "20px", padding: "20px 16px 16px", marginBottom: 12, boxShadow: "0 2px 16px rgba(0,0,0,0.06)" }}>
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", position: "relative" }}>
                         {/* connecting line behind steps */}
-                        <div style={{ position: "absolute", top: 22, right: "15%", left: "15%", height: 3, background: "#f0f0f0", zIndex: 0 }} />
+                        <div style={{ position: "absolute", top: 25, right: "12%", left: "12%", height: 2, background: "#edf1f5", zIndex: 0 }} />
 
                         {STEPS.map((step, i) => {
                             const done = i > activeStepIndex;  // RTL: higher index = earlier step
                             const active = i === activeStepIndex;
-                            const color = done || active ? "#ff6b35" : "#d1d5db";
-                            const bgColor = active ? "#ff6b35" : done ? "#fff3ed" : "#f5f5f5";
-                            const iconColor = active ? "white" : done ? "#ff6b35" : "#bbb";
+                            const color = done || active ? "#ff6b35" : "#cbd5e1";
+                            const bgColor = active ? "#ff6b35" : done ? "#fff3ed" : "#f8fafc";
+                            const iconColor = active ? "white" : done ? "#ff6b35" : "#94a3b8";
 
                             return (
-                                <div key={step.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, flex: 1, position: "relative", zIndex: 1 }}>
+                                <div key={step.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, flex: 1, position: "relative", zIndex: 1, minWidth: 0 }}>
                                     <div style={{
-                                        width: 46, height: 46, borderRadius: "50%",
+                                        width: 50, height: 50, borderRadius: "50%",
                                         background: bgColor,
                                         border: `2px solid ${color}`,
                                         display: "flex", alignItems: "center", justifyContent: "center",
                                         color: iconColor,
                                         transition: "all 0.3s ease",
-                                        boxShadow: active ? "0 4px 16px rgba(255,107,53,0.35)" : "none",
+                                        boxShadow: active ? "0 6px 16px rgba(255,107,53,0.32)" : done ? "0 2px 8px rgba(255,107,53,0.16)" : "none",
                                     }}>
                                         {step.icon}
                                     </div>
-                                    <div style={{ fontSize: "0.75rem", fontWeight: active ? 800 : 600, color: active ? "#ff6b35" : "#aaa", textAlign: "center", lineHeight: 1.3 }}>
+                                    <div style={{
+                                        fontSize: "0.75rem",
+                                        fontWeight: active ? 800 : 700,
+                                        color: active ? "#ff6b35" : done ? "#c2410c" : "#94a3b8",
+                                        textAlign: "center",
+                                        lineHeight: 1.25,
+                                        padding: "4px 6px",
+                                        borderRadius: 999,
+                                        background: active ? "rgba(255,107,53,0.1)" : "transparent",
+                                        maxWidth: "100%",
+                                        whiteSpace: "nowrap",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                    }}>
                                         {step.label}
                                     </div>
                                 </div>

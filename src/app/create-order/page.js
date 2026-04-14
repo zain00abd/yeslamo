@@ -10,6 +10,7 @@ import { showAppAlert } from "@/lib/appAlert";
 import { showAppConfirm } from "@/lib/appConfirm";
 import { doc, onSnapshot, collection, query, where, limit, getDocs, updateDoc } from "firebase/firestore";
 import { DEFAULT_DELIVERY_FEE_SYP } from "@/lib/orderPricing";
+import { notifyOrderCreatedPending } from "@/lib/customerNotifications";
 
 const CITY_OPTIONS = ["عربين", "زملكا", "حرستا", "حمورية"];
 
@@ -252,6 +253,7 @@ function CreateOrderContent() {
             setOrderId(newOrderId);
             setOrderItems(items);
             setTrackingStatus("pending");
+            notifyOrderCreatedPending({ id: newOrderId, orderNumber: newOrderNumber });
             setShowConfirmModal(false);
             await startTracking(newOrderId);
         } catch (error) {

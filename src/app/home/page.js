@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { getCurrentUserIdToken, getTokenOrRedirect } from "@/lib/clientAuth";
 import { showAppAlert } from "@/lib/appAlert";
+import { getUnreadNotificationsCount, notificationsEventName, syncOrderStatusNotification } from "@/lib/customerNotifications";
 
 /** أيقونات خطّية بلون موحّد (currentColor) */
 function IconStroke({ children, className = "" }) {
@@ -289,6 +290,7 @@ export default function HomePage() {
     const [loaded, setLoaded] = useState(false);
     const [lastOrder, setLastOrder] = useState(null);
     const [orderGateLoading, setOrderGateLoading] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
     const router = useRouter();
 
     function isBlockingOrderStatus(status) {
@@ -354,6 +356,17 @@ export default function HomePage() {
     }, [router]);
 
     useEffect(() => {
+        const refreshUnread = () => setUnreadCount(getUnreadNotificationsCount());
+        refreshUnread();
+        window.addEventListener("storage", refreshUnread);
+        window.addEventListener(notificationsEventName(), refreshUnread);
+        return () => {
+            window.removeEventListener("storage", refreshUnread);
+            window.removeEventListener(notificationsEventName(), refreshUnread);
+        };
+    }, []);
+
+    useEffect(() => {
         if (!loaded || !userUid) return;
         let cancelled = false;
         (async () => {
@@ -368,7 +381,10 @@ export default function HomePage() {
                     return;
                 }
                 const data = await res.json();
-                if (!cancelled && data.order) setLastOrder(data.order);
+                if (!cancelled && data.order) {
+                    setLastOrder(data.order);
+                    syncOrderStatusNotification(data.order, { notifyOnFirst: true });
+                }
             } catch {
                 /* ignore */
             }
@@ -392,19 +408,21 @@ export default function HomePage() {
             <header className="home-v2-topbar">
                 <div className="home-v2-topbar-row">
                     <div className="home-v2-user">
-                        <div className="home-v2-avatar">
-                            <IconStroke className="home-v2-avatar-svg">
-                                <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </IconStroke>
-                        </div>
-                        <div className="home-v2-user-text">
-                            <span className="home-v2-greet">{getGreeting()}</span>
-                            <span className="home-v2-name">{userName}</span>
-                        </div>
+                        <Link href="/" className="home-v2-brand">
+                            <Image src="/logo3.png" alt="يسلمو" width={48} height={48} className="home-v2-logo" priority />
+                        </Link>
                     </div>
-                    <Link href="/" className="home-v2-brand">
-                        <Image src="/logo3.png" alt="يسلمو" width={48} height={48} className="home-v2-logo" priority />
-                    </Link>
+                    <div className="home-v2-actions">
+                        <Link href="/notifications" className="home-v2-notif-btn home-v2-notif-btn--inline" aria-label="فتح الإشعارات">
+                            <svg viewBox="0 0 24 24" aria-hidden className="home-v2-notif-ico">
+                                <path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22z" />
+                                <path d="M4 18h16l-1.6-2.4a4 4 0 0 1-.67-2.22V10a5.73 5.73 0 0 0-4.27-5.61V4a1.46 1.46 0 0 0-2.92 0v.39A5.73 5.73 0 0 0 6.27 10v3.38a4 4 0 0 1-.67 2.22L4 18Z" />
+                            </svg>
+                            {unreadCount > 0 ? (
+                                <span className="home-v2-notif-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+                            ) : null}
+                        </Link>
+                    </div>
                 </div>
                 {deliveryLocation ? (
                     <div className="home-v2-location" role="region" aria-label="موقع التوصيل">

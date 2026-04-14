@@ -493,6 +493,73 @@ export default function DriverDashboard() {
         }
     }, []);
 
+    const updateCustomerStatusByPhoneOrUid = useCallback(async (order, nextStatus) => {
+        if (order.customerUid) {
+            await updateDoc(doc(db, "users", order.customerUid), { customerStatus: nextStatus });
+            return;
+        }
+        if (order.customerPhone) {
+            const snap = await getDocs(
+                query(collection(db, "users"), where("phone", "==", order.customerPhone.trim()))
+            );
+            if (!snap.empty) await updateDoc(snap.docs[0].ref, { customerStatus: nextStatus });
+        }
+    }, []);
+
+    const handleVerifyReport = useCallback(async (order, reportType) => {
+        try {
+            if (reportType === "continue_on_driver_risk") {
+                const ok = await showAppConfirm(
+                    "هل تريد متابعة الطلب على مسؤوليتك الكاملة؟ إذا كان الطلب مزيفاً ستكون المسؤولية عليك.",
+                );
+                if (!ok) return;
+                showAppAlert("تمت المتابعة على مسؤوليتك. أكمل الطلب بحذر.");
+                setVerifyModalOrder(null);
+                setVerifyModalCalled(false);
+                return;
+            }
+
+            if (reportType === "number_not_in_service") {
+                await updateDoc(doc(db, "orders", order.id), {
+                    status: "cancelled",
+                    cancelReason:
+                        "الرقم غير موجود بالخدمة — يجب إنشاء حساب جديد برقم هاتف موجود بالخدمة.",
+                    cancelledBy: "driver",
+                    customerStatus: "blocked_phone",
+                    updatedAt: serverTimestamp(),
+                });
+                await updateCustomerStatusByPhoneOrUid(order, "blocked_phone");
+                showAppAlert(
+                    "تم إلغاء الطلب وحظر الحساب. يُطلب من الزبون إنشاء حساب جديد برقم هاتف موجود بالخدمة.",
+                );
+                setVerifyModalOrder(null);
+                setVerifyModalCalled(false);
+                return;
+            }
+
+            if (reportType === "no_answer_on_call") {
+                await updateDoc(doc(db, "orders", order.id), {
+                    status: "cancelled",
+                    cancelReason:
+                        "لم يرد أحد على المكالمة — يجب الرد على المكالمة في أول عملية إنشاء طلب.",
+                    cancelledBy: "driver",
+                    customerStatus: "must_answer_call_once",
+                    updatedAt: serverTimestamp(),
+                });
+                await updateCustomerStatusByPhoneOrUid(order, "must_answer_call_once");
+                showAppAlert(
+                    "تم إلغاء الطلب. سيظهر للزبون تنبيه بضرورة الرد على المكالمة في أول طلب توصيل.",
+                );
+                setVerifyModalOrder(null);
+                setVerifyModalCalled(false);
+                return;
+            }
+        } catch (err) {
+            console.error("verify report error:", err);
+            showAppAlert("حدث خطأ أثناء تنفيذ الإبلاغ");
+        }
+    }, [updateCustomerStatusByPhoneOrUid]);
+
     // ── Update order status (delivered only — «في الطريق» يمر عبر نافذة سعر المشتريات) ──
     const handleUpdateStatus = useCallback(async (orderId, newStatus) => {
         if (newStatus !== "delivered") return;
@@ -1323,7 +1390,7 @@ export default function DriverDashboard() {
                         ) : (
                             <>
                                 <p style={{ fontSize: "0.86rem", color: "var(--driver-text-muted)", lineHeight: 1.6, marginBottom: "12px", fontWeight: 600 }}>
-                                    بعد التواصل، اختر أحد الخيارين ثم اضغط <strong style={{ color: "var(--driver-text)" }}>تأكيد</strong> بجانبه.
+                                    بعد التواصل، اختر الإجراء المناسب:
                                 </p>
                                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                                     <div
@@ -1370,10 +1437,12 @@ export default function DriverDashboard() {
                                             background: "rgba(254, 242, 242, 0.6)",
                                         }}
                                     >
-                                        <span style={{ fontWeight: 800, fontSize: "0.9rem", color: "#b91c1c" }}>إبلاغ</span>
+                                        <span style={{ fontWeight: 800, fontSize: "0.88rem", color: "#b91c1c", lineHeight: 1.45 }}>
+                                            الرقم غير موجود بالخدمة
+                                        </span>
                                         <button
                                             type="button"
-                                            onClick={() => handleVerifyCustomer(verifyModalOrder, "flagged")}
+                                            onClick={() => handleVerifyReport(verifyModalOrder, "number_not_in_service")}
                                             style={{
                                                 padding: "8px 18px",
                                                 borderRadius: "8px",
@@ -1388,6 +1457,74 @@ export default function DriverDashboard() {
                                             }}
                                         >
                                             تأكيد
+                                        </button>
+                                    </div>
+                                    <div
+                                        style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "space-between",
+                                            gap: "10px",
+                                            padding: "10px 12px",
+                                            borderRadius: "10px",
+                                            border: "1px solid rgba(245, 158, 11, 0.35)",
+                                            background: "rgba(255, 251, 235, 0.7)",
+                                        }}
+                                    >
+                                        <span style={{ fontWeight: 800, fontSize: "0.88rem", color: "#a16207", lineHeight: 1.45 }}>
+                                            لم يرد أحد على المكالمة
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleVerifyReport(verifyModalOrder, "no_answer_on_call")}
+                                            style={{
+                                                padding: "8px 18px",
+                                                borderRadius: "8px",
+                                                border: "1.5px solid #d97706",
+                                                background: "white",
+                                                color: "#b45309",
+                                                fontFamily: "inherit",
+                                                fontWeight: 800,
+                                                fontSize: "0.82rem",
+                                                cursor: "pointer",
+                                                flexShrink: 0,
+                                            }}
+                                        >
+                                            تأكيد
+                                        </button>
+                                    </div>
+                                    <div
+                                        style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "space-between",
+                                            gap: "10px",
+                                            padding: "10px 12px",
+                                            borderRadius: "10px",
+                                            border: "1px solid rgba(37, 99, 235, 0.35)",
+                                            background: "rgba(239, 246, 255, 0.75)",
+                                        }}
+                                    >
+                                        <span style={{ fontWeight: 800, fontSize: "0.88rem", color: "#1d4ed8", lineHeight: 1.45 }}>
+                                            لا يمكنني الاتصال حالياً للتأكيد
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleVerifyReport(verifyModalOrder, "continue_on_driver_risk")}
+                                            style={{
+                                                padding: "8px 14px",
+                                                borderRadius: "8px",
+                                                border: "1.5px solid #2563eb",
+                                                background: "white",
+                                                color: "#1d4ed8",
+                                                fontFamily: "inherit",
+                                                fontWeight: 800,
+                                                fontSize: "0.8rem",
+                                                cursor: "pointer",
+                                                flexShrink: 0,
+                                            }}
+                                        >
+                                            متابعة على مسؤوليتي
                                         </button>
                                     </div>
                                 </div>

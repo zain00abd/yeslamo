@@ -91,6 +91,7 @@ export default function BottomNav() {
                             width: 40, height: 40, borderRadius: "50%",
                             background: isActive ? "rgba(255,107,53,0.1)" : "transparent",
                             transition: "background 0.2s ease",
+                            position: "relative",
                         }}>
                             {tab.icon}
                         </span>

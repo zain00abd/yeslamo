@@ -71,6 +71,35 @@ export async function POST(request) {
             } catch (_) {}
         }
 
+        // قواعد إضافية بناءً على حالة الزبون
+        if (customerStatus === "blocked_phone") {
+            return NextResponse.json(
+                {
+                    error:
+                        "تم حظر الحساب لأن رقم الهاتف غير موجود بالخدمة. يرجى إنشاء حساب جديد برقم هاتف موجود بالخدمة.",
+                },
+                { status: 403 },
+            );
+        }
+        if (customerStatus === "must_answer_call_once") {
+            // إظهار التنبيه مرة واحدة في أول محاولة طلب لاحقة، ثم السماح بالمحاولة التالية
+            try {
+                if (customerUid) {
+                    await adminDb.collection("users").doc(customerUid).update({
+                        customerStatus: null,
+                        updatedAt: FieldValue.serverTimestamp(),
+                    });
+                }
+            } catch (_) {}
+            return NextResponse.json(
+                {
+                    error:
+                        "تم إلغاء طلبك السابق لأنك لم ترد على مكالمة المندوب. يرجى الرد على المكالمة في أول عملية طلب.",
+                },
+                { status: 409 },
+            );
+        }
+
         const orderData = {
             orderNumber,
             customerName: customerName.trim(),
