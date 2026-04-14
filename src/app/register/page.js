@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { getTokenOrRedirect } from "@/lib/clientAuth";
+import { isStrongPassword } from "@/lib/auth/profileValidation";
 
 const CITY_OPTIONS = ["عربين", "زملكا", "حرستا", "حمورية"];
 
@@ -82,7 +83,10 @@ export default function Register() {
 
         if (!isEditing) {
             if (!password) { setError("الرجاء إدخال كلمة السر"); return; }
-            if (password.length < 6) { setError("كلمة السر يجب أن تكون 6 أحرف على الأقل"); return; }
+            if (!isStrongPassword(password)) {
+                setError("كلمة السر يجب أن تكون 10 أحرف على الأقل وتحتوي على حرف ورقم");
+                return;
+            }
             if (password !== confirmPassword) { setError("كلمة السر غير متطابقة"); return; }
         }
 
@@ -223,7 +227,7 @@ export default function Register() {
                                     <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM9 8V6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9z" /></svg>
                                     <span>كلمة السر</span>
                                 </div>
-                                <input type="password" className="form-input" placeholder="كلمة السر (6 أحرف على الأقل)"
+                                <input type="password" className="form-input" placeholder="كلمة السر (10 أحرف على الأقل وتحتوي على حرف ورقم)"
                                     value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
                             </div>
 

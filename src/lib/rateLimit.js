@@ -52,13 +52,33 @@ export function rateLimit(key, limit = 10, windowMs = 60_000) {
  * Falls back to x-real-ip, then "unknown".
  */
 export function getClientIp(request) {
+    const headerCandidates = [
+        "cf-connecting-ip",
+        "x-vercel-forwarded-for",
+        "true-client-ip",
+        "x-real-ip",
+    ];
+    for (const headerName of headerCandidates) {
+        const value = request.headers.get(headerName)?.trim();
+        if (value) return value;
+    }
+
     const xff = request.headers.get("x-forwarded-for");
     if (xff) {
         const parts = xff.split(",").map((s) => s.trim()).filter(Boolean);
-        // In most setups with a single trusted reverse proxy (Vercel, nginx),
-        // the proxy appends the real client IP as the rightmost entry.
-        // If you use multiple trusted proxies, adjust the index accordingly.
-        return parts[parts.length - 1] || "unknown";
+        // Prefer the left-most value as the original client in standard proxy chains.
+        // If your infra defines another trusted position, adapt this selection.
+        return parts[0] || "unknown";
     }
-    return request.headers.get("x-real-ip") || "unknown";
+    return "unknown";
+}
+
+/**
+ * Builds a slightly stronger client key for rate limiting by combining
+ * network identity with a coarse user agent fingerprint.
+ */
+export function getClientFingerprint(request) {
+    const ip = getClientIp(request);
+    const userAgent = (request.headers.get("user-agent") || "ua:unknown").slice(0, 160);
+    return `${ip}|${userAgent}`;
 }

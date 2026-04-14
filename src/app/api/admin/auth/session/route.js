@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { signAdminSession, COOKIE_NAME } from "@/lib/auth/admin-session";
-import { rateLimit, getClientIp } from "@/lib/rateLimit";
+import { rateLimit, getClientFingerprint } from "@/lib/rateLimit";
 
 export async function POST(request) {
-    const ip = getClientIp(request);
-    const rl = rateLimit(`admin-session:${ip}`, 10, 15 * 60_000);
+    const clientKey = getClientFingerprint(request);
+    const rl = rateLimit(`admin-session:${clientKey}`, 10, 15 * 60_000);
     if (!rl.allowed) {
         return NextResponse.json(
             { error: "محاولات كثيرة. حاول مجدداً بعد قليل" },
@@ -29,7 +29,7 @@ export async function POST(request) {
     }
 
     try {
-        const decoded = await adminAuth.verifyIdToken(idToken);
+        const decoded = await adminAuth.verifyIdToken(idToken, true);
         const userSnap = await adminDb.collection("users").doc(decoded.uid).get();
         if (!userSnap.exists) {
             return NextResponse.json({ error: "الملف غير موجود" }, { status: 404 });

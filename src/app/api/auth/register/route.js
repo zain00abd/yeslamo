@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { rateLimit, getClientIp } from "@/lib/rateLimit";
+import { rateLimit, getClientFingerprint } from "@/lib/rateLimit";
 import { normalizePhone, validateRegistrationPayload } from "@/lib/auth/profileValidation";
 
 const DUPLICATE_ACCOUNT_ERROR = "تعذر إنشاء الحساب بهذه البيانات. إن كان لديك حساب، سجّل الدخول.";
 const RATE_LIMIT_WINDOW_MS = 10 * 60_000;
 
 export async function POST(request) {
-    const clientKey = getClientIp(request);
+    const clientKey = getClientFingerprint(request);
     const ipLimit = rateLimit(`register:ip:${clientKey}`, 5, RATE_LIMIT_WINDOW_MS);
     if (!ipLimit.allowed) {
         return NextResponse.json(

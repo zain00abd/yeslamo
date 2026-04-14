@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { rateLimit, getClientIp } from "@/lib/rateLimit";
+import { rateLimit, getClientFingerprint } from "@/lib/rateLimit";
 import { normalizePhone } from "@/lib/auth/profileValidation";
 
 const WINDOW_MS = 15 * 60_000;
@@ -12,8 +12,8 @@ const PHONE_LIMIT = 8;
  * Returns { ok: true } if the attempt is allowed, or 429 if blocked.
  */
 export async function POST(request) {
-    const ip = getClientIp(request);
-    const ipRl = rateLimit(`login:ip:${ip}`, IP_LIMIT, WINDOW_MS);
+    const clientFingerprint = getClientFingerprint(request);
+    const ipRl = rateLimit(`login:client:${clientFingerprint}`, IP_LIMIT, WINDOW_MS);
     if (!ipRl.allowed) {
         return NextResponse.json(
             { error: "محاولات كثيرة. حاول مجدداً بعد قليل" },

@@ -1,8 +1,10 @@
 const PHONE_REGEX = /^\+?[0-9]{7,15}$/;
+const PASSWORD_COMPLEXITY_REGEX = /^(?=.*[A-Za-z])(?=.*\d).+$/;
 const MAX_NAME_LEN = 80;
 const MAX_ADDRESS_LEN = 200;
 const MAX_CITY_LEN = 80;
 const MAX_DESC_LEN = 300;
+const MIN_PASSWORD_LEN = 10;
 
 function trimString(value) {
     return typeof value === "string" ? value.trim() : "";
@@ -10,6 +12,12 @@ function trimString(value) {
 
 export function normalizePhone(value) {
     return trimString(value).replace(/\s/g, "");
+}
+
+export function isStrongPassword(password) {
+    if (typeof password !== "string") return false;
+    if (password.length < MIN_PASSWORD_LEN) return false;
+    return PASSWORD_COMPLEXITY_REGEX.test(password);
 }
 
 export function isValidLocationCoords(value) {
@@ -49,8 +57,8 @@ export function validateRegistrationPayload(body) {
     if (!PHONE_REGEX.test(phone)) {
         return { error: "رقم الهاتف غير صالح" };
     }
-    if (password.length < 6) {
-        return { error: "كلمة السر يجب أن تكون 6 أحرف على الأقل" };
+    if (!isStrongPassword(password)) {
+        return { error: "كلمة السر يجب أن تكون 10 أحرف على الأقل وتحتوي على حرف ورقم" };
     }
     if (locationCoords !== null && !isValidLocationCoords(locationCoords)) {
         return { error: "إحداثيات الموقع غير صالحة" };

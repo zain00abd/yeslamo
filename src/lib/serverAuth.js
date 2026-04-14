@@ -18,7 +18,7 @@ export async function requireAuthUid(request) {
     }
 
     try {
-        const decoded = await adminAuth.verifyIdToken(token);
+        const decoded = await adminAuth.verifyIdToken(token, true);
         return { uid: decoded.uid, error: null };
     } catch {
         return {
