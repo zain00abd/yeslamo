@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { auth, db } from "@/lib/firebase";
 import { getCurrentUserIdToken } from "@/lib/clientAuth";
 import { showAppAlert } from "@/lib/appAlert";
@@ -164,10 +165,44 @@ export default function MyOrderPage() {
 
     if (loading) {
         return (
-            <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-                <div style={{ width: 40, height: 40, border: "4px solid #ff6b35", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                <div style={{ color: "#aaa", fontWeight: 700 }}>جاري التحميل...</div>
+            <div
+                style={{
+                    minHeight: "100dvh",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "24px",
+                }}
+            >
+                <div
+                    style={{
+                        width: "min(320px, 92vw)",
+                        borderRadius: "18px",
+                        background: "var(--surface)",
+                        padding: "20px",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "10px",
+                        boxShadow: "0 16px 36px rgba(2,6,23,0.16)",
+                    }}
+                >
+                    <Image src="/logo3.png" alt="يسلمو" width={60} height={60} priority />
+                    <div style={{ fontWeight: 800, fontSize: "0.95rem", color: "#1e293b", textAlign: "center" }}>
+                        جاري تحميل طلبك...
+                    </div>
+                    <div
+                        style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: "999px",
+                            border: "3px solid rgba(255,107,53,0.22)",
+                            borderTopColor: "var(--primary)",
+                            animation: "trackOrderSpin 0.85s linear infinite",
+                        }}
+                    />
+                    <style>{`@keyframes trackOrderSpin { to { transform: rotate(360deg); } }`}</style>
+                </div>
             </div>
         );
     }

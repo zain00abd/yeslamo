@@ -9,6 +9,10 @@ function generateOrderNumber() {
     return `ORD-${num}`;
 }
 
+function isBlockingStatus(status) {
+    return status !== "delivered" && status !== "cancelled";
+}
+
 export async function POST(request) {
     try {
         const { uid: authUid, error: authError } = await requireAuthUid(request);
@@ -25,6 +29,29 @@ export async function POST(request) {
         }
         if (customerUid && customerUid !== authUid) {
             return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+        }
+
+        const effectiveUid = customerUid || authUid;
+        const recent = await adminDb
+            .collection("orders")
+            .where("customerUid", "==", effectiveUid)
+            .orderBy("createdAt", "desc")
+            .limit(10)
+            .get();
+        const activeOrder = recent.docs.find((d) => isBlockingStatus(d.data()?.status));
+        if (activeOrder) {
+            const activeData = activeOrder.data();
+            return NextResponse.json(
+                {
+                    error: "لديك طلب قيد المعالجة حالياً. لا يمكن إنشاء طلب جديد قبل إتمام الطلب الحالي.",
+                    activeOrder: {
+                        id: activeOrder.id,
+                        orderNumber: activeData.orderNumber || null,
+                        status: activeData.status || null,
+                    },
+                },
+                { status: 409 },
+            );
         }
 
         const orderNumber = generateOrderNumber();
@@ -49,7 +76,7 @@ export async function POST(request) {
             customerName: customerName.trim(),
             customerPhone: customerPhone.trim(),
             customerAddress: customerAddress.trim(),
-            customerUid: customerUid || authUid,
+            customerUid: effectiveUid,
             customerStatus,
             items,
             notes: notes?.trim() || "",

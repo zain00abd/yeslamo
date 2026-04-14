@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { getCurrentUserIdToken } from "@/lib/clientAuth";
+import { showAppAlert } from "@/lib/appAlert";
 
 /** أيقونات خطّية بلون موحّد (currentColor) */
 function IconStroke({ children, className = "" }) {
@@ -287,7 +288,40 @@ export default function HomePage() {
     const [deliveryLocation, setDeliveryLocation] = useState(null);
     const [loaded, setLoaded] = useState(false);
     const [lastOrder, setLastOrder] = useState(null);
+    const [orderGateLoading, setOrderGateLoading] = useState(false);
     const router = useRouter();
+
+    function isBlockingOrderStatus(status) {
+        return status !== "delivered" && status !== "cancelled";
+    }
+
+    async function goToCreateOrderWithCheck(mode = "write") {
+        if (orderGateLoading) return;
+        setOrderGateLoading(true);
+        try {
+            const token = await getCurrentUserIdToken();
+            if (!token || !userUid) {
+                router.push(mode === "call" ? "/create-order?mode=call" : "/create-order");
+                return;
+            }
+            const res = await fetch(`/api/orders/my?uid=${encodeURIComponent(userUid)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const data = await res.json();
+            const ord = data?.order || null;
+            if (res.ok && ord && isBlockingOrderStatus(ord.status)) {
+                await showAppAlert("لا يمكن إنشاء طلب جديد حتى إنهاء الطلب الحالي.");
+                router.push("/track-order");
+                return;
+            }
+            router.push(mode === "call" ? "/create-order?mode=call" : "/create-order");
+        } catch {
+            // fallback: still allow entering create-order if check fails
+            router.push(mode === "call" ? "/create-order?mode=call" : "/create-order");
+        } finally {
+            setOrderGateLoading(false);
+        }
+    }
 
     useEffect(() => {
         try {
@@ -393,7 +427,14 @@ export default function HomePage() {
                                 طلبك يبدأ من هنا
                             </h1>
                             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                                <Link href="/create-order" className="home-v2-cta">
+                                <Link
+                                    href="/create-order"
+                                    className="home-v2-cta"
+                                    onClick={async (e) => {
+                                        e.preventDefault();
+                                        await goToCreateOrderWithCheck("write");
+                                    }}
+                                >
                                     <span className="home-v2-cta-inner">
                                         <IconStroke className="home-v2-cta-icon">
                                             <path d="M7 7h10l1 14H6L7 7Z" />
@@ -414,7 +455,14 @@ export default function HomePage() {
                                     اطلب أغراضك عبر مكالمة صوتية مع المندوب
                                 </div>
 
-                                <Link href="/create-order?mode=call" className="home-v2-cta home-v2-cta--secondary">
+                                <Link
+                                    href="/create-order?mode=call"
+                                    className="home-v2-cta home-v2-cta--secondary"
+                                    onClick={async (e) => {
+                                        e.preventDefault();
+                                        await goToCreateOrderWithCheck("call");
+                                    }}
+                                >
                                     <span className="home-v2-cta-inner">
                                         <IconStroke className="home-v2-cta-icon">
                                             <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
@@ -432,6 +480,50 @@ export default function HomePage() {
 
                 </div>
             </main>
+            {orderGateLoading ? (
+                <div
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        zIndex: 1400,
+                        background: "rgba(15,23,42,0.45)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "24px",
+                    }}
+                >
+                    <div
+                        style={{
+                            width: "min(320px, 92vw)",
+                            borderRadius: "18px",
+                            background: "var(--surface)",
+                            padding: "20px",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: "10px",
+                            boxShadow: "0 16px 36px rgba(2,6,23,0.28)",
+                        }}
+                    >
+                        <Image src="/logo3.png" alt="يسلمو" width={60} height={60} priority />
+                        <div style={{ fontWeight: 800, fontSize: "0.95rem", color: "#1e293b", textAlign: "center" }}>
+                            جاري التحقق من حالة طلبك...
+                        </div>
+                        <div
+                            style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: "999px",
+                                border: "3px solid rgba(255,107,53,0.22)",
+                                borderTopColor: "var(--primary)",
+                                animation: "homeOrderGateSpin 0.85s linear infinite",
+                            }}
+                        />
+                        <style>{`@keyframes homeOrderGateSpin { to { transform: rotate(360deg); } }`}</style>
+                    </div>
+                </div>
+            ) : null}
         </div>
     );
 }

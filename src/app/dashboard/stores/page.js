@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 export default function AdminStoresPage() {
     const [stores, setStores] = useState([]);
@@ -38,14 +39,30 @@ export default function AdminStoresPage() {
 
     return (
         <div>
-            <h1 className="admin-title">المتاجر</h1>
+            <div
+                style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "0.75rem",
+                    marginBottom: "1rem",
+                }}
+            >
+                <h1 className="admin-title" style={{ marginBottom: 0 }}>
+                    المتاجر
+                </h1>
+                <Link href="/dashboard/stores/add" className="admin-btn" style={{ textDecoration: "none" }}>
+                    + إضافة متجر
+                </Link>
+            </div>
             <p style={{ color: "var(--adm-muted)", marginBottom: "1rem", fontSize: "0.9rem" }}>
-                تُخزَّن المتاجر في مجموعة <code>stores</code> في Firestore. إن كانت فارغة، أضف مستندات يدوياً أو عبر سكربت.
+                تُخزَّن المتاجر في مجموعة <code>stores</code> في Firestore. يمكنك إضافة متجر جديد من النموذج أو إدارة التفعيل من الجدول.
             </p>
             {msg ? <p className="admin-error">{msg}</p> : null}
 
             <div className="admin-toolbar">
-                <button type="button" className="admin-btn ghost" onClick={load}>
+                <button type="button" className="admin-btn ghost" onClick={() => load()}>
                     تحديث
                 </button>
             </div>
@@ -55,9 +72,10 @@ export default function AdminStoresPage() {
                     <table className="admin-table">
                         <thead>
                             <tr>
+                                <th style={{ width: 56 }}>صورة</th>
                                 <th>الاسم</th>
                                 <th>النوع</th>
-                                <th>المنطقة</th>
+                                <th>المدينة</th>
                                 <th>نشط</th>
                                 <th>إجراء</th>
                             </tr>
@@ -65,20 +83,42 @@ export default function AdminStoresPage() {
                         <tbody>
                             {loading ? (
                                 <tr>
-                                    <td colSpan={5}>...</td>
+                                    <td colSpan={6}>...</td>
                                 </tr>
                             ) : stores.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} style={{ color: "var(--adm-muted)" }}>
-                                        لا توجد متاجر مسجّلة
+                                    <td colSpan={6} style={{ color: "var(--adm-muted)" }}>
+                                        لا توجد متاجر مسجّلة —{" "}
+                                        <Link href="/dashboard/stores/add" style={{ color: "var(--adm-accent)", fontWeight: 700 }}>
+                                            إضافة متجر
+                                        </Link>
                                     </td>
                                 </tr>
                             ) : (
                                 stores.map((s) => (
                                     <tr key={s.id}>
+                                        <td style={{ verticalAlign: "middle" }}>
+                                            {s.imageUrl ? (
+                                                <img
+                                                    src={s.imageUrl}
+                                                    alt=""
+                                                    width={44}
+                                                    height={44}
+                                                    style={{
+                                                        width: 44,
+                                                        height: 44,
+                                                        objectFit: "cover",
+                                                        borderRadius: 8,
+                                                        display: "block",
+                                                    }}
+                                                />
+                                            ) : (
+                                                <span style={{ color: "var(--adm-muted)", fontSize: "0.75rem" }}>—</span>
+                                            )}
+                                        </td>
                                         <td>{s.name || "—"}</td>
                                         <td>{s.type || "—"}</td>
-                                        <td>{s.areaId || s.area || "—"}</td>
+                                        <td>{s.city || s.area || (s.areaId && s.areaId !== "default" ? s.areaId : "—")}</td>
                                         <td>{s.isActive !== false ? "نعم" : "لا"}</td>
                                         <td>
                                             <button type="button" className="admin-btn ghost" onClick={() => toggle(s)}>

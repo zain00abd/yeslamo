@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
@@ -138,7 +138,7 @@ function CreateOrderContent() {
     }
 
     // Start listening to the order doc in real-time (بعد جاهزية Auth حتى تقبل قواعد Firestore القراءة)
-    async function startTracking(docId) {
+    const startTracking = useCallback(async (docId) => {
         if (unsubscribeRef.current) unsubscribeRef.current();
         await auth.authStateReady();
         if (!auth.currentUser) {
@@ -176,7 +176,7 @@ function CreateOrderContent() {
             }
         });
         unsubscribeRef.current = unsub;
-    }
+    }, [userUid]);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState("");
@@ -234,6 +234,12 @@ function CreateOrderContent() {
             const data = await res.json();
 
             if (!res.ok) {
+                if (res.status === 409) {
+                    setSubmitError("لا يمكن إنشاء طلب جديد حتى إنهاء الطلب الحالي.");
+                    setIsSubmitting(false);
+                    setShowConfirmModal(false);
+                    return;
+                }
                 setSubmitError(data.error || "حدث خطأ في تقديم الطلب");
                 setIsSubmitting(false);
                 setShowConfirmModal(false);
