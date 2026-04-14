@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { getCurrentUserIdToken } from "@/lib/clientAuth";
+import { getTokenOrRedirect } from "@/lib/clientAuth";
 
 const CITY_OPTIONS = ["عربين", "زملكا", "حرستا", "حمورية"];
 
@@ -93,9 +93,8 @@ export default function Register() {
 
         try {
             if (isEditing) {
-                const token = await getCurrentUserIdToken();
+                const token = await getTokenOrRedirect(router);
                 if (!token) {
-                    setError("انتهت الجلسة، الرجاء تسجيل الدخول مجددًا");
                     setLoading(false);
                     return;
                 }
@@ -137,12 +136,12 @@ export default function Register() {
                 });
                 const data = await res.json();
                 if (!res.ok) { setError(data.error || "حدث خطأ"); setLoading(false); return; }
-                localStorage.setItem("yaslamo_user", JSON.stringify({
-                    ...data.user, city: city.trim(), locationDesc: locationDesc.trim(), locationCoords
-                }));
+                // بعد إنشاء الحساب نطلب من المستخدم تسجيل الدخول يدوياً
+                localStorage.removeItem("yaslamo_user");
+                window.dispatchEvent(new Event("yaslamo_auth"));
             }
 
-            router.push("/");
+            router.push("/login");
         } catch (err) {
             setError("حدث خطأ في الاتصال بالخادم");
             setLoading(false);

@@ -15,7 +15,7 @@ import {
     serverTimestamp,
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
-import { getCurrentUserIdToken } from "@/lib/clientAuth";
+import { getTokenOrRedirect } from "@/lib/clientAuth";
 import { showAppAlert } from "@/lib/appAlert";
 import { showAppConfirm } from "@/lib/appConfirm";
 import { signInWithEmailAndPassword } from "firebase/auth";
@@ -432,9 +432,14 @@ export default function DriverDashboard() {
         setIsAccepting(true);
 
         try {
-            const token = await getCurrentUserIdToken();
+            const token = await getTokenOrRedirect({
+                replace: (href) => {
+                    try {
+                        window.location.href = href;
+                    } catch {}
+                },
+            });
             if (!token) {
-                showAppAlert("انتهت الجلسة. سجّل الدخول مجدداً.");
                 return;
             }
             const res = await fetch("/api/driver/accept-order", {
@@ -442,6 +447,14 @@ export default function DriverDashboard() {
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ orderId }),
             });
+            if (res.status === 401 || res.status === 403) {
+                try {
+                    localStorage.removeItem("yaslamo_user");
+                    window.dispatchEvent(new Event("yaslamo_auth"));
+                } catch {}
+                window.location.href = "/login";
+                return;
+            }
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
                 throw new Error(data.error || "تعذر قبول الطلب");

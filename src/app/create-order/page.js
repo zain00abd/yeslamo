@@ -3,9 +3,9 @@
 import { useState, useEffect, useRef, Suspense, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
-import { getCurrentUserIdToken } from "@/lib/clientAuth";
+import { getTokenOrRedirect } from "@/lib/clientAuth";
 import { showAppAlert } from "@/lib/appAlert";
 import { showAppConfirm } from "@/lib/appConfirm";
 import { doc, onSnapshot, collection, query, where, limit, getDocs, updateDoc } from "firebase/firestore";
@@ -14,6 +14,7 @@ import { DEFAULT_DELIVERY_FEE_SYP } from "@/lib/orderPricing";
 const CITY_OPTIONS = ["عربين", "زملكا", "حرستا", "حمورية"];
 
 function CreateOrderContent() {
+    const router = useRouter();
     const [userName, setUserName] = useState("");
     const [userPhone, setUserPhone] = useState("");
     const [address, setAddress] = useState("");
@@ -200,9 +201,8 @@ function CreateOrderContent() {
         setSubmitError("");
 
         try {
-            const token = await getCurrentUserIdToken();
+            const token = await getTokenOrRedirect(router);
             if (!token) {
-                setSubmitError("انتهت الجلسة، الرجاء تسجيل الدخول مجددًا");
                 setIsSubmitting(false);
                 setShowConfirmModal(false);
                 return;

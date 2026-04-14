@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useLayoutEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { getCurrentUserIdToken } from "@/lib/clientAuth";
+import { getCurrentUserIdToken, getTokenOrRedirect } from "@/lib/clientAuth";
 import { showAppAlert } from "@/lib/appAlert";
 
 /** أيقونات خطّية بلون موحّد (currentColor) */
@@ -299,9 +299,8 @@ export default function HomePage() {
         if (orderGateLoading) return;
         setOrderGateLoading(true);
         try {
-            const token = await getCurrentUserIdToken();
+            const token = await getTokenOrRedirect(router);
             if (!token || !userUid) {
-                router.push(mode === "call" ? "/create-order?mode=call" : "/create-order");
                 return;
             }
             const res = await fetch(`/api/orders/my?uid=${encodeURIComponent(userUid)}`, {
@@ -359,11 +358,15 @@ export default function HomePage() {
         let cancelled = false;
         (async () => {
             try {
-                const token = await getCurrentUserIdToken();
+                const token = await getTokenOrRedirect(router);
                 if (!token) return;
                 const res = await fetch(`/api/orders/recent?uid=${encodeURIComponent(userUid)}`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
+                if (res.status === 401 || res.status === 403) {
+                    router.replace("/login");
+                    return;
+                }
                 const data = await res.json();
                 if (!cancelled && data.order) setLastOrder(data.order);
             } catch {
@@ -373,7 +376,7 @@ export default function HomePage() {
         return () => {
             cancelled = true;
         };
-    }, [loaded, userUid]);
+    }, [loaded, userUid, router]);
 
     if (!loaded) return null;
 
