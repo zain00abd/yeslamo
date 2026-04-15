@@ -85,6 +85,7 @@ export function validateGoogleRegistrationPayload(body) {
     const locationCoords = body?.locationCoords ?? null;
 
     if (!name) return { error: "الاسم مطلوب" };
+    if (!phone) return { error: "رقم الهاتف مطلوب" };
     if (!address) return { error: "العنوان مطلوب" };
     if (name.length > MAX_NAME_LEN) return { error: "الاسم طويل جداً" };
     if (address.length > MAX_ADDRESS_LEN) return { error: "العنوان طويل جداً" };
