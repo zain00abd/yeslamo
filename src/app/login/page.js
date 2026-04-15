@@ -8,6 +8,18 @@ import { signInWithEmailAndPassword, signOut, signInWithPopup, GoogleAuthProvide
 import { auth, db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 
+async function getDocWithRetry(ref, retries = 2, delayMs = 1200) {
+    for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+            return await getDoc(ref);
+        } catch (err) {
+            const isOffline = err.code === "unavailable" || err.message?.includes("client is offline");
+            if (!isOffline || attempt === retries - 1) throw err;
+            await new Promise((r) => setTimeout(r, delayMs));
+        }
+    }
+}
+
 export default function Login() {
     const router = useRouter();
     const [phone, setPhone] = useState("");
@@ -40,7 +52,7 @@ export default function Login() {
             const email = `${phone.trim().replace(/\s/g, "")}@yaslamo.app`;
             const cred = await signInWithEmailAndPassword(auth, email, password);
 
-            const profileSnap = await getDoc(doc(db, "users", cred.user.uid));
+            const profileSnap = await getDocWithRetry(doc(db, "users", cred.user.uid));
             if (!profileSnap.exists()) {
                 await signOut(auth);
                 setError("الملف الشخصي غير موجود");
@@ -73,6 +85,10 @@ export default function Login() {
                 setError("رقم الهاتف أو كلمة السر غير صحيحة");
             } else if (err.code === "auth/too-many-requests") {
                 setError("محاولات كثيرة. حاول مجدداً بعد قليل");
+            } else if (err.code === "unavailable" || err.message?.includes("client is offline")) {
+                setError("لا يوجد اتصال بالإنترنت. تحقق من اتصالك وحاول مجدداً.");
+            } else if (err.name === "TypeError" && err.message?.includes("fetch")) {
+                setError("تعذّر الوصول إلى الخادم. تحقق من اتصالك بالإنترنت.");
             } else {
                 setError("حدث خطأ في تسجيل الدخول");
             }
@@ -88,7 +104,7 @@ export default function Login() {
             provider.setCustomParameters({ prompt: "select_account" });
             const cred = await signInWithPopup(auth, provider);
 
-            const profileSnap = await getDoc(doc(db, "users", cred.user.uid));
+            const profileSnap = await getDocWithRetry(doc(db, "users", cred.user.uid));
 
             if (profileSnap.exists()) {
                 const profile = profileSnap.data();
@@ -119,6 +135,8 @@ export default function Login() {
                 // User closed the popup — no error message needed
             } else if (err.code === "auth/popup-blocked") {
                 setError("تم حجب النافذة المنبثقة. يرجى السماح بها من إعدادات المتصفح.");
+            } else if (err.code === "unavailable" || err.message?.includes("client is offline")) {
+                setError("لا يوجد اتصال بالإنترنت. تحقق من اتصالك وحاول مجدداً.");
             } else {
                 setError("حدث خطأ في تسجيل الدخول بحساب Google");
             }
