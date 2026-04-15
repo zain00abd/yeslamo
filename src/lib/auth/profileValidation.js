@@ -1,10 +1,9 @@
 const PHONE_REGEX = /^\+?[0-9]{7,15}$/;
-const PASSWORD_COMPLEXITY_REGEX = /^(?=.*[A-Za-z])(?=.*\d).+$/;
 const MAX_NAME_LEN = 80;
 const MAX_ADDRESS_LEN = 200;
 const MAX_CITY_LEN = 80;
 const MAX_DESC_LEN = 300;
-const MIN_PASSWORD_LEN = 10;
+const MIN_PASSWORD_LEN = 6;
 
 function trimString(value) {
     return typeof value === "string" ? value.trim() : "";
@@ -17,7 +16,7 @@ export function normalizePhone(value) {
 export function isStrongPassword(password) {
     if (typeof password !== "string") return false;
     if (password.length < MIN_PASSWORD_LEN) return false;
-    return PASSWORD_COMPLEXITY_REGEX.test(password);
+    return true;
 }
 
 export function isValidLocationCoords(value) {
@@ -58,7 +57,7 @@ export function validateRegistrationPayload(body) {
         return { error: "رقم الهاتف غير صالح" };
     }
     if (!isStrongPassword(password)) {
-        return { error: "كلمة السر يجب أن تكون 10 أحرف على الأقل وتحتوي على حرف ورقم" };
+        return { error: "كلمة السر يجب أن تكون 6 أحرف على الأقل" };
     }
     if (locationCoords !== null && !isValidLocationCoords(locationCoords)) {
         return { error: "إحداثيات الموقع غير صالحة" };
@@ -69,6 +68,37 @@ export function validateRegistrationPayload(body) {
             name,
             phone,
             password,
+            address,
+            city,
+            locationDesc,
+            locationCoords: locationCoords ? { lat: locationCoords.lat, lng: locationCoords.lng } : null,
+        },
+    };
+}
+
+export function validateGoogleRegistrationPayload(body) {
+    const name = trimString(body?.name);
+    const phone = normalizePhone(body?.phone);
+    const address = trimString(body?.address);
+    const city = trimString(body?.city);
+    const locationDesc = trimString(body?.locationDesc);
+    const locationCoords = body?.locationCoords ?? null;
+
+    if (!name) return { error: "الاسم مطلوب" };
+    if (!address) return { error: "العنوان مطلوب" };
+    if (name.length > MAX_NAME_LEN) return { error: "الاسم طويل جداً" };
+    if (address.length > MAX_ADDRESS_LEN) return { error: "العنوان طويل جداً" };
+    if (city.length > MAX_CITY_LEN) return { error: "اسم المدينة طويل جداً" };
+    if (locationDesc.length > MAX_DESC_LEN) return { error: "وصف الموقع طويل جداً" };
+    if (phone && !PHONE_REGEX.test(phone)) return { error: "رقم الهاتف غير صالح" };
+    if (locationCoords !== null && !isValidLocationCoords(locationCoords)) {
+        return { error: "إحداثيات الموقع غير صالحة" };
+    }
+
+    return {
+        data: {
+            name,
+            phone: phone || "",
             address,
             city,
             locationDesc,
