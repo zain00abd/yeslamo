@@ -294,9 +294,29 @@ function CreateOrderContent() {
         return address || "—";
     }
 
+    function goBack() {
+        if (typeof window !== "undefined" && window.history.length > 1) {
+            router.back();
+            return;
+        }
+        router.push("/home");
+    }
+
     return (
         <>
             <div className="page-wrapper create-order-page">
+                <div className="top-bar">
+                <button type="button" className="stores-v2-back" onClick={goBack} aria-label="رجوع">
+                        <svg className="stores-v2-back-ico" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+                            <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                    </button>
+                    <div className="top-bar-logo" aria-label="شعار التطبيق">
+                        <Image src="/logo3.png" alt="يسلمو" width={44} height={44} priority />
+                        {/* <span>{isCallMode ? "اتصال بالمندوب" : "إنشاء طلب"}</span> */}
+                    </div>
+                </div>
+
                 {/* Form Content — ملء الشاشة: التمرير داخل منطقة الطلب فقط */}
                 <div className="content-area create-order-content">
 
@@ -365,10 +385,7 @@ function CreateOrderContent() {
                                     />
                                 </div>
 
-                                <div className="order-hint">
-                                    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" /></svg>
-                                    استخدم شرطة (-) للفصل بين الاسم والكمية
-                                </div>
+
                             </>
                         )}
                     </div>

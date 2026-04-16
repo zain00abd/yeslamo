@@ -1383,6 +1383,12 @@ body:has(.bottom-nav)>div:not(.bottom-nav) {
   box-sizing: border-box;
 }
 
+.create-order-page .top-bar-logo img {
+  width: 80px;
+  height: 44px;
+  border-radius: 10px;
+}
+
 .create-order-page .order-mode-toggle-wrap--above {
   flex-shrink: 0;
 }
