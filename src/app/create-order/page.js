@@ -14,6 +14,13 @@ import { notifyOrderCreatedPending } from "@/lib/customerNotifications";
 
 const CITY_OPTIONS = ["عربين", "زملكا", "حرستا", "حمورية"];
 
+// تحويل الأرقام العربية/الفارسية إلى أرقام إنجليزية فور الكتابة
+function toLatinNums(str) {
+    return str
+        .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
+        .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06F0));
+}
+
 function CreateOrderContent() {
     const router = useRouter();
     const [userName, setUserName] = useState("");
@@ -29,12 +36,10 @@ function CreateOrderContent() {
     const searchParams = useSearchParams();
     const isCallMode = searchParams?.get("mode") === "call";
 
-    // Account location
     const [acctCoords, setAcctCoords] = useState(null);
     const [acctCity, setAcctCity] = useState("");
     const [acctLocationDesc, setAcctLocationDesc] = useState("");
 
-    // Different-location modal
     const [showLocModal, setShowLocModal] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [useCustomLoc, setUseCustomLoc] = useState(false);
@@ -45,13 +50,11 @@ function CreateOrderContent() {
     const [modalGpsError, setModalGpsError] = useState("");
     const [modalGpsDone, setModalGpsDone] = useState(false);
 
-    // ── Real-time tracking state ─────────────────────────────
-    // "idle" | "pending" | "accepted"
     const [trackingStatus, setTrackingStatus] = useState("idle");
     const [orderNumber, setOrderNumber] = useState("");
-    const [orderId, setOrderId] = useState("");       // Firestore doc ID
-    const [orderItems, setOrderItems] = useState([]); // for summary display
-    const [driverInfo, setDriverInfo] = useState(null); // { name, phone }
+    const [orderId, setOrderId] = useState("");
+    const [orderItems, setOrderItems] = useState([]);
+    const [driverInfo, setDriverInfo] = useState(null);
     const unsubscribeRef = useRef(null);
 
     useEffect(() => {
@@ -72,14 +75,10 @@ function CreateOrderContent() {
         } catch (e) { }
     }, []);
 
-    // Cleanup listener on unmount
     useEffect(() => () => { if (unsubscribeRef.current) unsubscribeRef.current(); }, []);
 
     useEffect(() => {
-        if (isCallMode) {
-            setItemsCount(1);
-            return;
-        }
+        if (isCallMode) { setItemsCount(1); return; }
         const lines = orders.split("\n").filter((line) => line.trim() !== "");
         setItemsCount(lines.length);
     }, [orders, isCallMode]);
@@ -113,9 +112,7 @@ function CreateOrderContent() {
     }
 
     function getOrderSummaryItems() {
-        if (isCallMode) {
-            return [{ name: "سيحدد المندوب الأصناف معك هاتفيا", quantity: 1 }];
-        }
+        if (isCallMode) return [{ name: "سيحدد المندوب الأصناف معك هاتفيا", quantity: 1 }];
         return parseOrders(orders);
     }
 
@@ -139,39 +136,24 @@ function CreateOrderContent() {
         setShowConfirmModal(true);
     }
 
-    // Start listening to the order doc in real-time (بعد جاهزية Auth حتى تقبل قواعد Firestore القراءة)
     const startTracking = useCallback(async (docId) => {
         if (unsubscribeRef.current) unsubscribeRef.current();
         await auth.authStateReady();
-        if (!auth.currentUser) {
-            showAppAlert("سجّل الدخول لمتابعة الطلب لحظياً");
-            return;
-        }
-        if (userUid && auth.currentUser.uid !== userUid) {
-            showAppAlert("جلسة غير متطابقة. سجّل الدخول مرة أخرى.");
-            return;
-        }
+        if (!auth.currentUser) { showAppAlert("سجّل الدخول لمتابعة الطلب لحظياً"); return; }
+        if (userUid && auth.currentUser.uid !== userUid) { showAppAlert("جلسة غير متطابقة. سجّل الدخول مرة أخرى."); return; }
         const orderRef = doc(db, "orders", docId);
         const unsub = onSnapshot(orderRef, async (snap) => {
             if (!snap.exists()) return;
             const data = snap.data();
-
             if (data.status === "pending") {
                 setTrackingStatus("pending");
             } else if (data.status === "accepted" && data.driverId) {
-                // Fetch driver profile from users collection
                 let driver = { name: "المندوب", phone: "" };
                 try {
-                    const driverDoc = await getDocs(
-                        query(collection(db, "users"), where("__name__", "==", data.driverId), limit(1))
-                    );
-                    // If stored by uid as doc ID, try direct approach
                     const { getDoc } = await import("firebase/firestore");
                     const dRef = doc(db, "users", data.driverId);
                     const dSnap = await getDoc(dRef);
-                    if (dSnap.exists()) {
-                        driver = { name: dSnap.data().name || "المندوب", phone: dSnap.data().phone || "" };
-                    }
+                    if (dSnap.exists()) driver = { name: dSnap.data().name || "المندوب", phone: dSnap.data().phone || "" };
                 } catch (e) { }
                 setDriverInfo(driver);
                 setTrackingStatus("accepted");
@@ -195,30 +177,18 @@ function CreateOrderContent() {
     }
 
     async function submitOrder() {
-        const items = isCallMode
-            ? [{ name: "طلب عبر المكالمة", quantity: 1 }]
-            : parseOrders(orders);
+        const items = isCallMode ? [{ name: "طلب عبر المكالمة", quantity: 1 }] : parseOrders(orders);
         setIsSubmitting(true);
         setSubmitError("");
-
         try {
             const token = await getTokenOrRedirect(router);
-            if (!token) {
-                setIsSubmitting(false);
-                setShowConfirmModal(false);
-                return;
-            }
-
+            if (!token) { setIsSubmitting(false); setShowConfirmModal(false); return; }
             const activeCoords = useCustomLoc ? modalCoords : acctCoords;
             const activeCity = useCustomLoc ? modalCity : acctCity;
             const activeDesc = useCustomLoc ? modalDesc : acctLocationDesc;
-
             const res = await fetch("/api/orders", {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                 body: JSON.stringify({
                     customerName: userName.trim(),
                     customerPhone: userPhone.trim(),
@@ -231,22 +201,11 @@ function CreateOrderContent() {
                     customerStatus: customerStatus || null,
                 }),
             });
-
             const data = await res.json();
-
             if (!res.ok) {
-                if (res.status === 409) {
-                    setSubmitError("لا يمكن إنشاء طلب جديد حتى إنهاء الطلب الحالي.");
-                    setIsSubmitting(false);
-                    setShowConfirmModal(false);
-                    return;
-                }
-                setSubmitError(data.error || "حدث خطأ في تقديم الطلب");
-                setIsSubmitting(false);
-                setShowConfirmModal(false);
-                return;
+                if (res.status === 409) { setSubmitError("لا يمكن إنشاء طلب جديد حتى إنهاء الطلب الحالي."); setIsSubmitting(false); setShowConfirmModal(false); return; }
+                setSubmitError(data.error || "حدث خطأ في تقديم الطلب"); setIsSubmitting(false); setShowConfirmModal(false); return;
             }
-
             const newOrderId = data.order.id;
             const newOrderNumber = data.order.orderNumber;
             setOrderNumber(newOrderNumber);
@@ -283,7 +242,6 @@ function CreateOrderContent() {
             if (unsubscribeRef.current) unsubscribeRef.current();
             showAppAlert("تم إلغاء الطلب بنجاح");
         } catch (err) {
-            console.error("Cancel error:", err);
             showAppAlert("حدث خطأ أثناء إلغاء الطلب");
         }
     }
@@ -295,818 +253,1115 @@ function CreateOrderContent() {
     }
 
     function goBack() {
-        if (typeof window !== "undefined" && window.history.length > 1) {
-            router.back();
-            return;
-        }
+        if (typeof window !== "undefined" && window.history.length > 1) { router.back(); return; }
         router.push("/home");
     }
 
     return (
         <>
-            <div className="page-wrapper create-order-page">
-                <div className="top-bar">
-                <button type="button" className="stores-v2-back" onClick={goBack} aria-label="رجوع">
-                        <svg className="stores-v2-back-ico" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
-                            <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+            <style>{`
+                @keyframes co-fade-up {
+                    from { opacity: 0; transform: translateY(16px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes co-sheet-up {
+                    from { transform: translateY(100%); }
+                    to { transform: translateY(0); }
+                }
+                @keyframes co-pulse-ring {
+                    0% { transform: scale(0.85); opacity: 0.9; }
+                    100% { transform: scale(1.7); opacity: 0; }
+                }
+                @keyframes co-pop-in {
+                    0% { transform: scale(0.4); opacity: 0; }
+                    65% { transform: scale(1.12); }
+                    100% { transform: scale(1); opacity: 1; }
+                }
+                @keyframes co-spin {
+                    to { transform: rotate(360deg); }
+                }
+                .co-page {
+                    min-height: 0;
+                    height: 100dvh;
+                    max-height: 100dvh;
+                    overflow: hidden;
+                    width: 100%;
+                    background: #f7f8fa;
+                    display: flex;
+                    flex-direction: column;
+                }
+                .co-topbar {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    padding: 12px 16px;
+                    padding-top: max(12px, env(safe-area-inset-top));
+                    background: linear-gradient(135deg, #ff6b35 0%, #f05a28 100%);
+                    flex-shrink: 0;
+                    position: relative;
+                    z-index: 10;
+                    box-shadow: 0 3px 14px rgba(255,107,53,0.3);
+                }
+                .co-back-btn {
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 12px;
+                    border: 1.5px solid rgba(255,255,255,0.3);
+                    background: rgba(255,255,255,0.18);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    color: #ffffff;
+                    transition: all 0.18s ease;
+                    flex-shrink: 0;
+                    backdrop-filter: blur(4px);
+                }
+                .co-back-btn:active { background: rgba(255,255,255,0.28); transform: scale(0.93); }
+                .co-topbar-logo {
+                    position: absolute;
+                    left: 50%;
+                    transform: translateX(-50%);
+                }
+                .co-scroll-area {
+                    flex: 1;
+                    min-height: 0;
+                    overflow: hidden;
+                    display: flex;
+                    flex-direction: column;
+                    padding: 14px 16px;
+                    padding-bottom: max(16px, env(safe-area-inset-bottom));
+                    gap: 12px;
+                    max-width: 540px;
+                    width: 100%;
+                    margin: 0 auto;
+                }
+                /* Mode Toggle */
+                .co-mode-toggle {
+                    display: flex;
+                    background: #eef0f3;
+                    border-radius: 14px;
+                    padding: 4px;
+                    gap: 4px;
+                    flex-shrink: 0;
+                }
+                .co-mode-btn {
+                    flex: 1;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 7px;
+                    padding: 11px 8px;
+                    border-radius: 11px;
+                    font-size: 0.88rem;
+                    font-weight: 800;
+                    color: #64748b;
+                    text-decoration: none;
+                    transition: all 0.22s ease;
+                    border: none;
+                    background: transparent;
+                    cursor: pointer;
+                }
+                .co-mode-btn--active {
+                    background: #ffffff;
+                    color: #ff6b35;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.08), 0 0 0 1px rgba(255,107,53,0.15);
+                }
+                .co-mode-btn svg { flex-shrink: 0; }
+                /* Order Card */
+                .co-card {
+                    background: #ffffff;
+                    border-radius: 20px;
+                    border: 1px solid #f0f1f4;
+                    box-shadow: 0 1px 6px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03);
+                    overflow: hidden;
+                    display: flex;
+                    flex-direction: column;
+                    animation: co-fade-up 0.28s ease both;
+                }
+                .co-card--flex { flex: 1; min-height: 0; }
+                .co-card-header {
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    padding: 16px 16px 14px;
+                    border-bottom: 1px solid #f7f8fa;
+                }
+                .co-card-icon {
+                    width: 44px;
+                    height: 44px;
+                    border-radius: 13px;
+                    background: linear-gradient(135deg, #fff3ed, #ffe4d4);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    flex-shrink: 0;
+                }
+                .co-card-icon svg { fill: #ff6b35; }
+                .co-card-icon--green { background: linear-gradient(135deg, #ecfdf5, #d1fae5); }
+                .co-card-icon--green svg { fill: #10b981; }
+                .co-card-title { font-size: 0.97rem; font-weight: 800; color: #1e293b; line-height: 1.3; }
+                .co-card-subtitle { font-size: 0.77rem; color: #94a3b8; margin-top: 2px; }
+                .co-card-body { padding: 14px 16px; display: flex; flex-direction: column; }
+                .co-card-body--flex { flex: 1; min-height: 0; }
+                /* Textarea */
+                .co-textarea-wrap {
+                    flex: 1;
+                    min-height: 0;
+                    display: flex;
+                    flex-direction: column;
+                }
+                .co-textarea {
+                    flex: 1;
+                    min-height: 0;
+                    width: 100%;
+                    padding: 14px;
+                    font-size: 0.97rem;
+                    font-family: inherit;
+                    line-height: 1.75;
+                    color: #1e293b;
+                    background: #f9fafb;
+                    border: 2px solid #eef0f3;
+                    border-radius: 14px;
+                    outline: none;
+                    resize: none;
+                    transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+                    overflow-y: auto;
+                    -webkit-overflow-scrolling: touch;
+                }
+                .co-textarea:focus {
+                    border-color: #ff6b35;
+                    background: #ffffff;
+                    box-shadow: 0 0 0 4px rgba(255,107,53,0.1);
+                }
+                .co-textarea::placeholder { color: #c0c7d4; font-size: 0.88rem; line-height: 1.8; }
+                /* Textarea tip row */
+                .co-tip {
+                    display: flex;
+                    align-items: center;
+                    gap: 7px;
+                    padding: 10px 13px;
+                    background: linear-gradient(135deg, #fff8f5, #fff3ed);
+                    border-radius: 12px;
+                    border: 1px solid rgba(255,107,53,0.15);
+                    font-size: 0.82rem;
+                    color: #c2410c;
+                    font-weight: 600;
+                    margin-top: 10px;
+                    flex-shrink: 0;
+                }
+                .co-tip svg { flex-shrink: 0; fill: #ff6b35; }
+                /* Call mode hint */
+                .co-call-hint {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    padding: 28px 20px;
+                    gap: 12px;
+                    text-align: center;
+                }
+                .co-call-hint-icon {
+                    width: 72px;
+                    height: 72px;
+                    border-radius: 50%;
+                    background: linear-gradient(135deg, #fff3ed, #ffe4d4);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    border: 2px solid rgba(255,107,53,0.2);
+                }
+                .co-call-hint-icon svg { fill: #ff6b35; }
+                .co-call-hint-title { font-size: 1rem; font-weight: 800; color: #1e293b; }
+                .co-call-hint-sub { font-size: 0.85rem; color: #64748b; line-height: 1.6; max-width: 240px; }
+                /* Error */
+                .co-error {
+                    display: flex;
+                    align-items: center;
+                    gap: 9px;
+                    padding: 12px 15px;
+                    background: #fef2f2;
+                    border: 1.5px solid #fca5a5;
+                    border-radius: 14px;
+                    color: #dc2626;
+                    font-size: 0.88rem;
+                    font-weight: 600;
+                    flex-shrink: 0;
+                    animation: co-fade-up 0.22s ease both;
+                }
+                .co-error svg { fill: #dc2626; flex-shrink: 0; }
+                /* Submit Button */
+                .co-submit-btn {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
+                    width: 100%;
+                    padding: 17px;
+                    border: none;
+                    border-radius: 16px;
+                    background: linear-gradient(135deg, #ff6b35 0%, #f05a28 100%);
+                    color: #ffffff;
+                    font-family: inherit;
+                    font-size: 1.02rem;
+                    font-weight: 900;
+                    cursor: pointer;
+                    box-shadow: 0 6px 22px rgba(255,107,53,0.35);
+                    transition: all 0.2s ease;
+                    flex-shrink: 0;
+                    letter-spacing: 0.01em;
+                }
+                .co-submit-btn:active { transform: scale(0.97); box-shadow: 0 3px 12px rgba(255,107,53,0.25); }
+                .co-submit-btn svg { fill: white; flex-shrink: 0; }
+                /* ── Bottom Sheet / Modal ── */
+                .co-sheet-backdrop {
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(15, 23, 42, 0.55);
+                    backdrop-filter: blur(2px);
+                    -webkit-backdrop-filter: blur(2px);
+                    z-index: 1000;
+                    display: flex;
+                    align-items: flex-end;
+                    justify-content: center;
+                }
+                @media (min-width: 540px) {
+                    .co-sheet-backdrop { align-items: center; }
+                    .co-sheet { border-radius: 24px !important; max-width: 500px; }
+                }
+                .co-sheet {
+                    background: #ffffff;
+                    border-radius: 28px 28px 0 0;
+                    width: 100%;
+                    max-height: calc(100dvh - 40px);
+                    overflow: hidden;
+                    display: flex;
+                    flex-direction: column;
+                    animation: co-sheet-up 0.3s cubic-bezier(0.32, 0.72, 0, 1) both;
+                    padding-bottom: max(20px, env(safe-area-inset-bottom));
+                }
+                .co-sheet-handle {
+                    width: 38px;
+                    height: 4px;
+                    background: #dde1e8;
+                    border-radius: 99px;
+                    margin: 12px auto 4px;
+                    flex-shrink: 0;
+                }
+                .co-sheet-title {
+                    text-align: center;
+                    font-size: 1.05rem;
+                    font-weight: 800;
+                    color: #1e293b;
+                    padding: 10px 20px 14px;
+                    flex-shrink: 0;
+                }
+                .co-sheet-body {
+                    padding: 0 20px;
+                    flex: 1;
+                    min-height: 0;
+                    overflow-y: auto;
+                    -webkit-overflow-scrolling: touch;
+                    overscroll-behavior: contain;
+                }
+                .co-sheet-footer {
+                    padding: 14px 20px 0;
+                    flex-shrink: 0;
+                    display: flex;
+                    gap: 10px;
+                }
+                /* Location box */
+                .co-loc-box {
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 12px;
+                    padding: 13px 14px;
+                    background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+                    border: 1.5px solid #a7f3d0;
+                    border-radius: 16px;
+                    margin-bottom: 12px;
+                    flex-wrap: wrap;
+                }
+                .co-loc-icon {
+                    width: 38px;
+                    height: 38px;
+                    border-radius: 10px;
+                    background: #10b981;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    flex-shrink: 0;
+                    margin-top: 1px;
+                }
+                .co-loc-icon svg { fill: white; }
+                .co-loc-label { font-size: 0.72rem; color: #065f46; font-weight: 700; margin-bottom: 3px; }
+                .co-loc-text { font-size: 0.94rem; font-weight: 700; color: #1e293b; line-height: 1.5; }
+                /* Summary section */
+                .co-summary-wrap {
+                    background: #f9fafb;
+                    border: 1px solid #f0f1f4;
+                    border-radius: 16px;
+                    overflow: hidden;
+                    margin-bottom: 14px;
+                    flex-shrink: 0;
+                }
+                .co-summary-scroll {
+                    max-height: 180px;
+                    overflow-y: auto;
+                    -webkit-overflow-scrolling: touch;
+                    overscroll-behavior: contain;
+                    padding: 10px 14px;
+                }
+                .co-summary-item {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 8px 0;
+                    font-size: 0.9rem;
+                    color: #334155;
+                }
+                .co-summary-item + .co-summary-item { border-top: 1px solid #f0f1f4; }
+                .co-qty-badge {
+                    background: #fff0eb;
+                    color: #ea580c;
+                    border-radius: 8px;
+                    padding: 3px 9px;
+                    font-size: 0.78rem;
+                    font-weight: 800;
+                    flex-shrink: 0;
+                }
+                .co-delivery-row {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    padding: 12px 14px;
+                    background: linear-gradient(135deg, #fffdfb, #fff4ed);
+                    border-top: 1px solid rgba(255,107,53,0.12);
+                }
+                .co-delivery-icon {
+                    width: 38px;
+                    height: 38px;
+                    border-radius: 11px;
+                    background: linear-gradient(135deg, #ff6b35, #f05a28);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 4px 12px rgba(255,107,53,0.3);
+                }
+                .co-delivery-icon svg { fill: white; }
+                .co-delivery-label { font-size: 0.82rem; font-weight: 800; color: #1e293b; }
+                .co-delivery-sub { font-size: 0.7rem; color: #94a3b8; margin-top: 1px; }
+                .co-delivery-price { font-size: 1.5rem; font-weight: 900; color: #ea580c; line-height: 1; }
+                .co-delivery-currency { font-size: 0.72rem; color: #64748b; font-weight: 700; margin-top: 3px; text-align: center; }
+                /* Modal buttons */
+                .co-btn-secondary {
+                    flex: 1;
+                    padding: 14px;
+                    border-radius: 14px;
+                    border: 1.5px solid #e2e8f0;
+                    background: #f7f8fa;
+                    font-family: inherit;
+                    font-weight: 700;
+                    font-size: 0.95rem;
+                    color: #64748b;
+                    cursor: pointer;
+                    transition: all 0.18s;
+                }
+                .co-btn-secondary:active { background: #eef0f3; }
+                .co-btn-primary {
+                    flex: 2;
+                    padding: 14px;
+                    border-radius: 14px;
+                    border: none;
+                    background: linear-gradient(135deg, #ff6b35, #f05a28);
+                    color: white;
+                    font-family: inherit;
+                    font-weight: 900;
+                    font-size: 1rem;
+                    cursor: pointer;
+                    box-shadow: 0 4px 16px rgba(255,107,53,0.3);
+                    transition: all 0.18s;
+                }
+                .co-btn-primary:active { transform: scale(0.97); }
+                .co-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+                /* GPS Button */
+                .co-gps-btn {
+                    width: 100%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
+                    padding: 15px;
+                    border-radius: 14px;
+                    border: 2px dashed;
+                    font-family: inherit;
+                    font-weight: 800;
+                    font-size: 0.97rem;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    margin-bottom: 14px;
+                }
+                .co-gps-btn--idle { border-color: #ff6b35; background: #fff8f5; color: #c2410c; }
+                .co-gps-btn--done { border-color: #10b981; background: #f0fdf4; color: #065f46; border-style: solid; }
+                .co-gps-btn--loading { border-color: #94a3b8; background: #f8fafc; color: #64748b; cursor: wait; }
+                .co-form-label { font-size: 0.8rem; font-weight: 700; color: #64748b; margin-bottom: 6px; }
+                .co-form-select, .co-form-textarea {
+                    width: 100%;
+                    padding: 12px 14px;
+                    font-family: inherit;
+                    font-size: 0.95rem;
+                    color: #1e293b;
+                    background: #f9fafb;
+                    border: 1.5px solid #eef0f3;
+                    border-radius: 13px;
+                    outline: none;
+                    transition: border-color 0.18s, box-shadow 0.18s;
+                    margin-bottom: 12px;
+                    appearance: none;
+                    -webkit-appearance: none;
+                }
+                .co-form-select:focus, .co-form-textarea:focus {
+                    border-color: #ff6b35;
+                    box-shadow: 0 0 0 3px rgba(255,107,53,0.1);
+                    background: #fff;
+                }
+                .co-form-textarea { min-height: 80px; resize: vertical; }
+                /* ── Tracking: Pending ── */
+                .co-tracking-wrap {
+                    position: fixed;
+                    inset: 0;
+                    z-index: 2000;
+                    background: linear-gradient(160deg, #fff8f5 0%, #f7f8fa 60%, #f0fdf4 100%);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: flex-start;
+                    overflow: hidden;
+                    padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+                    box-sizing: border-box;
+                }
+                .co-tracking-inner {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    width: 100%;
+                    max-width: 420px;
+                    margin: 0 auto;
+                    flex: 1;
+                    min-height: 0;
+                    overflow: hidden;
+                    justify-content: center;
+                    gap: 0;
+                }
+                .co-pulse-wrap {
+                    position: relative;
+                    width: 118px;
+                    height: 118px;
+                    min-width: 118px;
+                    min-height: 118px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    flex-shrink: 0;
+                    margin-bottom: 22px;
+                }
+                .co-pulse-ring {
+                    position: absolute;
+                    inset: 0;
+                    border-radius: 50%;
+                    border: 2.5px solid #ff6b35;
+                    animation: co-pulse-ring 1.6s ease-out infinite;
+                }
+                .co-pulse-ring:nth-child(2) { animation-delay: 0.55s; }
+                .co-pulse-center {
+                    width: 74px;
+                    height: 74px;
+                    border-radius: 50%;
+                    background: linear-gradient(135deg, #ff6b35, #f05a28);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 8px 28px rgba(255,107,53,0.45);
+                    position: relative;
+                    z-index: 1;
+                }
+                .co-pulse-center svg { fill: white; }
+                .co-tracking-title {
+                    font-size: clamp(1.15rem, 4.5vw, 1.45rem);
+                    font-weight: 900;
+                    color: #1e293b;
+                    margin-bottom: 8px;
+                    text-align: center;
+                    line-height: 1.3;
+                    flex-shrink: 0;
+                }
+                .co-tracking-sub {
+                    font-size: 0.9rem;
+                    color: #64748b;
+                    text-align: center;
+                    line-height: 1.6;
+                    margin-bottom: 22px;
+                    flex-shrink: 0;
+                    max-width: 300px;
+                }
+                .co-tracking-card {
+                    background: #ffffff;
+                    border-radius: 20px;
+                    box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+                    width: 100%;
+                    overflow: hidden;
+                    display: flex;
+                    flex-direction: column;
+                    flex: 1;
+                    min-height: 0;
+                    max-height: 260px;
+                }
+                .co-tracking-card-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    padding: 13px 16px 10px;
+                    border-bottom: 1px solid #f0f1f4;
+                    flex-shrink: 0;
+                }
+                .co-tracking-card-label { font-size: 0.73rem; font-weight: 800; color: #ff6b35; letter-spacing: 0.04em; }
+                .co-order-num-badge {
+                    background: linear-gradient(135deg, #fff0eb, #ffe4d4);
+                    color: #ea580c;
+                    border-radius: 20px;
+                    padding: 4px 12px;
+                    font-size: 0.85rem;
+                    font-weight: 900;
+                }
+                .co-tracking-list {
+                    flex: 1;
+                    min-height: 0;
+                    overflow-y: auto;
+                    -webkit-overflow-scrolling: touch;
+                    overscroll-behavior: contain;
+                    padding: 8px 16px;
+                }
+                .co-tracking-item {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 9px 0;
+                    font-size: 0.91rem;
+                    color: #334155;
+                }
+                .co-tracking-item + .co-tracking-item { border-top: 1px solid #f7f8fa; }
+                .co-tracking-qty { background: #fff0eb; color: #ea580c; border-radius: 7px; padding: 2px 9px; font-size: 0.8rem; font-weight: 800; flex-shrink: 0; }
+                .co-track-footer-note {
+                    font-size: 0.8rem;
+                    color: #94a3b8;
+                    text-align: center;
+                    margin-top: 18px;
+                    flex-shrink: 0;
+                }
+                .co-cancel-btn {
+                    margin-top: 16px;
+                    padding: 13px 36px;
+                    border-radius: 14px;
+                    border: 1.5px solid rgba(239,68,68,0.35);
+                    background: rgba(239,68,68,0.06);
+                    color: #ef4444;
+                    font-family: inherit;
+                    font-weight: 800;
+                    font-size: 0.95rem;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    flex-shrink: 0;
+                }
+                .co-cancel-btn:active { background: rgba(239,68,68,0.12); transform: scale(0.97); }
+                /* ── Tracking: Accepted ── */
+                .co-accepted-wrap {
+                    position: fixed;
+                    inset: 0;
+                    z-index: 2000;
+                    background: linear-gradient(160deg, #f0fdf4 0%, #f7f8fa 50%, #fff8f5 100%);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    overflow-y: auto;
+                    -webkit-overflow-scrolling: touch;
+                    padding: max(28px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+                    box-sizing: border-box;
+                    text-align: center;
+                    gap: 16px;
+                }
+                .co-accepted-icon {
+                    width: 90px;
+                    height: 90px;
+                    border-radius: 50%;
+                    background: linear-gradient(135deg, #10b981, #059669);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 10px 32px rgba(16,185,129,0.35);
+                    animation: co-pop-in 0.5s ease-out both;
+                    flex-shrink: 0;
+                }
+                .co-accepted-icon svg { fill: white; }
+                .co-accepted-title { font-size: 1.45rem; font-weight: 900; color: #065f46; flex-shrink: 0; }
+                .co-driver-card {
+                    background: #ffffff;
+                    border-radius: 20px;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+                    width: 100%;
+                    max-width: 400px;
+                    padding: 18px;
+                    text-align: right;
+                    flex-shrink: 0;
+                }
+                .co-driver-label { font-size: 0.7rem; font-weight: 800; color: #10b981; letter-spacing: 0.04em; margin-bottom: 12px; }
+                .co-driver-row { display: flex; align-items: center; gap: 14px; }
+                .co-driver-avatar {
+                    width: 52px;
+                    height: 52px;
+                    border-radius: 50%;
+                    background: linear-gradient(135deg, #ff6b35, #f05a28);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    flex-shrink: 0;
+                }
+                .co-driver-avatar svg { fill: white; }
+                .co-driver-name { font-size: 1.1rem; font-weight: 900; color: #1e293b; }
+                .co-driver-phone { font-size: 0.88rem; color: #64748b; margin-top: 2px; }
+                .co-accepted-summary {
+                    background: #ffffff;
+                    border-radius: 20px;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+                    width: 100%;
+                    max-width: 400px;
+                    padding: 16px 18px;
+                    text-align: right;
+                    flex-shrink: 0;
+                }
+                .co-accepted-summary-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: 12px;
+                }
+                .co-track-btn {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
+                    padding: 16px 24px;
+                    border-radius: 16px;
+                    border: none;
+                    background: linear-gradient(135deg, #10b981, #059669);
+                    color: white;
+                    font-family: inherit;
+                    font-weight: 900;
+                    font-size: 1rem;
+                    cursor: pointer;
+                    box-shadow: 0 6px 22px rgba(16,185,129,0.35);
+                    width: 100%;
+                    max-width: 400px;
+                    flex-shrink: 0;
+                    text-decoration: none;
+                    transition: all 0.2s;
+                }
+                .co-track-btn:active { transform: scale(0.97); }
+                .co-track-btn svg { fill: white; }
+                /* Spinner */
+                .co-spinner {
+                    width: 18px;
+                    height: 18px;
+                    border: 2.5px solid rgba(255,255,255,0.35);
+                    border-top-color: white;
+                    border-radius: 50%;
+                    animation: co-spin 0.7s linear infinite;
+                    flex-shrink: 0;
+                }
+            `}</style>
+
+            {/* ── MAIN PAGE ── */}
+            <div className="co-page">
+                {/* Top Bar */}
+                <div className="co-topbar">
+                    <button type="button" className="co-back-btn" onClick={goBack} aria-label="رجوع">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M15 18l-6-6 6-6" />
                         </svg>
                     </button>
-                    <div className="top-bar-logo" aria-label="شعار التطبيق">
-                        <Image src="/logo3.png" alt="يسلمو" width={44} height={44} priority />
-                        {/* <span>{isCallMode ? "اتصال بالمندوب" : "إنشاء طلب"}</span> */}
+                    <div className="co-topbar-logo">
+                        <Image src="/logo3.png" alt="يسلمو" width={56} height={56} priority style={{ borderRadius: 13, display: "block" }} />
                     </div>
+                    {/* spacer to balance the back button */}
+                    <div style={{ width: 40, flexShrink: 0 }} />
                 </div>
 
-                {/* Form Content — ملء الشاشة: التمرير داخل منطقة الطلب فقط */}
-                <div className="content-area create-order-content">
+                {/* Scroll / Content Area */}
+                <div className="co-scroll-area">
 
-                    {/* Orders — refreshed design */}
-                <div className="order-mode-toggle-wrap order-mode-toggle-wrap--above">
-                    <div className="order-mode-toggle" role="tablist" aria-label="طريقة إنشاء الطلب">
+                    {/* Mode Toggle */}
+                    <div className="co-mode-toggle">
                         <Link
                             href="/create-order"
-                            className={`order-mode-btn${!isCallMode ? " order-mode-btn--active" : ""}`}
+                            className={`co-mode-btn${!isCallMode ? " co-mode-btn--active" : ""}`}
                             role="tab"
                             aria-selected={!isCallMode}
                         >
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="M12 20h9" />
-                                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5z" />
+                            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5z" />
                             </svg>
                             كتابة الطلب
                         </Link>
                         <Link
                             href="/create-order?mode=call"
-                            className={`order-mode-btn${isCallMode ? " order-mode-btn--active" : ""}`}
+                            className={`co-mode-btn${isCallMode ? " co-mode-btn--active" : ""}`}
                             role="tab"
                             aria-selected={isCallMode}
                         >
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72 12.8 12.8 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.8 12.8 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
                             </svg>
                             اتصال بالمندوب
                         </Link>
                     </div>
-                </div>
 
-                    <div className={`order-section-card${isCallMode ? " order-section-card--call" : ""}`}>
-                        <div className="order-section-header">
-                            <div className="order-section-icon">
-                                <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h10v2H7v-2z" /></svg>
+                    {/* Order Card */}
+                    <div className={`co-card${isCallMode ? "" : " co-card--flex"}`}>
+                        <div className="co-card-header">
+                            <div className="co-card-icon">
+                                <svg viewBox="0 0 24 24" width="22" height="22">
+                                    {isCallMode
+                                        ? <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.07 21 3 13.93 3 5c0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.24.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+                                        : <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h10v2H7v-2z" />
+                                    }
+                                </svg>
                             </div>
                             <div>
-                                <div className="order-section-title">الطلبات المرادة</div>
-                                <div className="order-section-subtitle">
-                                    {isCallMode ? "سيحدد المندوب الأصناف معك هاتفيا" : "اكتب طلباتك هنا"}
+                                <div className="co-card-title">
+                                    {isCallMode ? "اتصال بالمندوب" : "الطلبات المرادة"}
+                                </div>
+                                <div className="co-card-subtitle">
+                                    {isCallMode ? "سيحدد المندوب الأصناف معك هاتفيا" : "كل صنف في سطر منفصل"}
                                 </div>
                             </div>
                         </div>
 
                         {isCallMode ? (
-                            <div className="order-hint" style={{ marginTop: 12 }}>
-                                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
-                                    <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.07 21 3 13.93 3 5c0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.24.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
-                                </svg>
-                                سيقوم المندوب بالتواصل معك هاتفيا لتحديد طلبك
+                            <div className="co-call-hint">
+                                <div className="co-call-hint-icon">
+                                    <svg viewBox="0 0 24 24" width="32" height="32">
+                                        <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.07 21 3 13.93 3 5c0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.24.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+                                    </svg>
+                                </div>
+                                <div className="co-call-hint-title">سيتصل بك المندوب</div>
+                                <div className="co-call-hint-sub">سيقوم المندوب بالتواصل معك هاتفياً لتحديد طلبك والاتفاق على التفاصيل</div>
                             </div>
                         ) : (
-                            <>
-                                <div className="order-write-label">
-                                    <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>
-                                    اكتب طلباتك هنا
-                                </div>
-
-                                <div className="order-textarea-scroll">
+                            <div className={`co-card-body co-card-body--flex`}>
+                                <div className="co-textarea-wrap">
                                     <textarea
-                                        className="order-textarea"
+                                        className="co-textarea"
                                         placeholder={`بيتزا عائلية - 2\nمشروب غازي - 3\nبطاطس مقلية كبيرة - 1\n\nاكتب كل صنف في سطر...`}
                                         value={orders}
-                                        onChange={(e) => setOrders(e.target.value)}
+                                        onChange={(e) => setOrders(toLatinNums(e.target.value))}
+                                        dir="rtl"
                                     />
                                 </div>
-
-
-                            </>
+                                <div className="co-tip">
+                                    <svg viewBox="0 0 24 24" width="16" height="16">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+                                    </svg>
+                                    يرجى كتابة الصنف مع الكمية
+                                </div>
+                            </div>
                         )}
                     </div>
 
+                    {/* Error */}
                     {submitError && (
-                        <div className="create-order-submit-error" style={{
-                            background: "#fff0f0", border: "1px solid #ffcdd2", borderRadius: "12px",
-                            padding: "12px 16px", marginBottom: "16px", color: "#c62828", fontSize: "0.9rem",
-                            display: "flex", alignItems: "center", gap: "8px",
-                        }}>
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="#c62828">
+                        <div className="co-error">
+                            <svg viewBox="0 0 24 24" width="18" height="18">
                                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
                             </svg>
                             {submitError}
                         </div>
                     )}
 
-                    {/* Confirm button — prominent full width */}
-                    <button className="order-confirm-btn" onClick={handleConfirmClick}>
-                        <svg viewBox="0 0 24 24" fill="white">
+                    {/* Submit Button */}
+                    <button className="co-submit-btn" onClick={handleConfirmClick}>
+                        <svg viewBox="0 0 24 24" width="21" height="21">
                             <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
                         </svg>
                         {isCallMode ? "إرسال طلب تواصل" : "تأكيد الطلب"}
                     </button>
+
                 </div>
             </div>
 
-            {/* ── CONFIRMATION MODAL — Location check before submit ── */}
+            {/* ── CONFIRM MODAL (Bottom Sheet) ── */}
             {showConfirmModal && (
-                <div
-                    className="create-order-modal-backdrop"
-                    style={{
-                        position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        zIndex: 1000,
-                        padding: "max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))",
-                        boxSizing: "border-box",
-                        overflow: "hidden",
-                    }}
-                    onClick={() => setShowConfirmModal(false)}
-                >
-                    <div style={{
-                        background: "var(--surface)", borderRadius: "20px",
-                        padding: "24px 20px 20px", width: "100%",
-                        maxWidth: "min(520px, calc(100vw - 24px))",
-                        height: "min(720px, calc(100dvh - 24px))",
-                        maxHeight: "min(720px, calc(100dvh - 24px))",
-                        display: "flex",
-                        flexDirection: "column",
-                        overflow: "hidden",
-                        boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
-                    }}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div style={{
-                            fontWeight: 800, fontSize: "1.15rem", marginBottom: "16px", textAlign: "center", color: "#1a1a2e",
-                            flexShrink: 0,
-                        }}>
-                            تأكيد موقع التوصيل
-                        </div>
+                <div className="co-sheet-backdrop" onClick={() => setShowConfirmModal(false)}>
+                    <div className="co-sheet" onClick={(e) => e.stopPropagation()}>
+                        <div className="co-sheet-handle" />
+                        <div className="co-sheet-title">تأكيد موقع التوصيل</div>
 
-                        {/* Current location display */}
-                        <div style={{
-                            background: "#f0fdf4", borderRadius: "14px", padding: "16px",
-                            border: "1.5px solid #a7f3d0", marginBottom: "14px",
-                            flexShrink: 0,
-                        }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                                <svg viewBox="0 0 24 24" width="18" height="18" fill="#059669">
-                                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-                                </svg>
-                                <span style={{ fontSize: "0.8rem", color: "#059669", fontWeight: 700 }}>
-                                    {useCustomLoc ? "موقع مختلف محدد" : "موقع حسابك"}
-                                </span>
-                            </div>
-                            <div style={{ fontWeight: 600, color: "#1a1a2e", fontSize: "0.95rem", lineHeight: 1.6 }}>
-                                {getActiveLocationText()}
-                            </div>
-                        </div>
-
-                        {/* Change location button */}
-                        <button
-                            type="button"
-                            onClick={() => { setShowConfirmModal(false); setShowLocModal(true); }}
-                            style={{
-                                width: "100%", padding: "12px", borderRadius: "12px",
-                                border: "1.5px solid #ff6b35", background: "var(--surface)",
-                                color: "#ff6b35", fontFamily: "inherit", fontWeight: 700,
-                                fontSize: "0.92rem", cursor: "pointer",
-                                display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-                                marginBottom: "14px",
-                                flexShrink: 0,
-                            }}
-                        >
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-                            </svg>
-                            تغيير الموقع
-                        </button>
-
-                        {/* Order summary: عنوان + قائمة قابلة للتمرير + رسوم ثابتة */}
-                        <div style={{
-                            background: "#fafafa", borderRadius: "12px", padding: "12px 12px 14px",
-                            border: "1px solid #f0f0f0", marginBottom: "16px",
-                            flex: 1,
-                            minHeight: 0,
-                            display: "flex",
-                            flexDirection: "column",
-                            overflow: "hidden",
-                        }}>
-                            <div style={{
-                                fontSize: "0.78rem", color: "#888", fontWeight: 700, marginBottom: "8px",
-                                flexShrink: 0,
-                            }}>
-                                ملخص الطلب
-                            </div>
-                            <div
-                                style={{
-                                    flex: 1,
-                                    minHeight: 0,
-                                    overflowY: "auto",
-                                    WebkitOverflowScrolling: "touch",
-                                    overscrollBehavior: "contain",
-                                    paddingInlineEnd: "4px",
-                                }}
-                            >
-                                {getOrderSummaryItems().map((item, i) => (
-                                    <div key={i} style={{
-                                        display: "flex", justifyContent: "space-between", alignItems: "center",
-                                        padding: "6px 0", borderBottom: i < getOrderSummaryItems().length - 1 ? "1px solid #f0f0f0" : "none",
-                                        fontSize: "0.88rem", color: "#334155",
-                                    }}>
-                                        <span style={{ background: "#fff0eb", color: "#ff6b35", borderRadius: "6px", padding: "2px 8px", fontSize: "0.78rem", fontWeight: 700 }}>
-                                            × {item.quantity}
-                                        </span>
-                                        <span>{item.name}</span>
-                                    </div>
-                                ))}
-                            </div>
-                            <div
-                                style={{
-                                    marginTop: "10px",
-                                    paddingTop: "12px",
-                                    borderTop: "1px solid #e8eaee",
-                                    flexShrink: 0,
-                                }}
-                            >
-                                <div
+                        <div className="co-sheet-body">
+                            {/* Location box with inline change button */}
+                            <div className="co-loc-box">
+                                <div className="co-loc-icon">
+                                    <svg viewBox="0 0 24 24" width="19" height="19">
+                                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                                    </svg>
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div className="co-loc-label">{useCustomLoc ? "موقع مختلف محدد" : "موقع حسابك"}</div>
+                                    <div className="co-loc-text">{getActiveLocationText()}</div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => { setShowConfirmModal(false); setShowLocModal(true); }}
                                     style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "space-between",
-                                        gap: "12px",
-                                        padding: "12px 14px",
-                                        borderRadius: "14px",
-                                        background: "linear-gradient(135deg, #fffdfb 0%, #fff4ed 100%)",
-                                        border: "1px solid rgba(255, 107, 53, 0.2)",
-                                        boxShadow: "0 4px 14px rgba(255, 107, 53, 0.1)",
+                                        display: "flex", alignItems: "center", gap: 5,
+                                        padding: "6px 11px", borderRadius: 10,
+                                        border: "1.5px solid rgba(255,107,53,0.45)",
+                                        background: "rgba(255,255,255,0.85)",
+                                        color: "#ea580c", fontFamily: "inherit",
+                                        fontSize: "0.8rem", fontWeight: 800,
+                                        cursor: "pointer", flexShrink: 0, alignSelf: "center",
+                                        transition: "all 0.18s",
                                     }}
                                 >
-                                    <div
-                                        style={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            gap: "10px",
-                                            flex: 1,
-                                            minWidth: 0,
-                                        }}
-                                    >
-                                        <div
-                                            aria-hidden
-                                            style={{
-                                                width: "42px",
-                                                height: "42px",
-                                                borderRadius: "12px",
-                                                background: "linear-gradient(145deg, #ff6b35, #ff8f5a)",
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: "center",
-                                                flexShrink: 0,
-                                                boxShadow: "0 4px 14px rgba(255, 107, 53, 0.35)",
-                                            }}
-                                        >
-                                            <svg viewBox="0 0 24 24" width="22" height="22" fill="white">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+                                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+                                    </svg>
+                                    تغيير
+                                </button>
+                            </div>
+
+                            {/* Order summary */}
+                            <div className="co-summary-wrap">
+                                <div className="co-summary-scroll">
+                                    {getOrderSummaryItems().map((item, i) => (
+                                        <div key={i} className="co-summary-item">
+                                            <span className="co-qty-badge">× {item.quantity}</span>
+                                            <span style={{ flex: 1, textAlign: "right", paddingRight: 8 }}>{item.name}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="co-delivery-row">
+                                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                        <div className="co-delivery-icon">
+                                            <svg viewBox="0 0 24 24" width="20" height="20">
                                                 <path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
                                             </svg>
                                         </div>
-                                        <div style={{ minWidth: 0 }}>
-                                            <div
-                                                style={{
-                                                    fontSize: "0.82rem",
-                                                    color: "#1e293b",
-                                                    fontWeight: 800,
-                                                    lineHeight: 1.35,
-                                                }}
-                                            >
-                                                رسوم التوصيل
-                                            </div>
-                                            <div
-                                                style={{
-                                                    fontSize: "0.72rem",
-                                                    color: "#94a3b8",
-                                                    fontWeight: 600,
-                                                    marginTop: "2px",
-                                                }}
-                                            >
-                                                ثابتة لهذا الطلب
-                                            </div>
+                                        <div>
+                                            <div className="co-delivery-label">رسوم التوصيل</div>
+                                            <div className="co-delivery-sub">ثابتة لهذا الطلب</div>
                                         </div>
                                     </div>
-                                    <div
-                                        style={{
-                                            flexShrink: 0,
-                                            textAlign: "center",
-                                            paddingInlineStart: "4px",
-                                        }}
-                                    >
-                                        <div
-                                            style={{
-                                                fontSize: "1.4rem",
-                                                fontWeight: 900,
-                                                color: "#ea580c",
-                                                fontVariantNumeric: "tabular-nums",
-                                                lineHeight: 1.1,
-                                                letterSpacing: "-0.02em",
-                                            }}
-                                        >
-                                            {DEFAULT_DELIVERY_FEE_SYP}
-                                        </div>
-                                        <div
-                                            style={{
-                                                fontSize: "0.7rem",
-                                                color: "#64748b",
-                                                fontWeight: 700,
-                                                marginTop: "4px",
-                                                whiteSpace: "nowrap",
-                                            }}
-                                        >
-                                            ل.س جديدة
-                                        </div>
+                                    <div>
+                                        <div className="co-delivery-price">{DEFAULT_DELIVERY_FEE_SYP}</div>
+                                        <div className="co-delivery-currency">ل.س جديدة</div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Confirm / Cancel buttons */}
-                        <div style={{ display: "flex", gap: "10px", flexShrink: 0, paddingTop: "4px" }}>
-                            <button
-                                type="button"
-                                onClick={() => setShowConfirmModal(false)}
-                                style={{
-                                    flex: 1, padding: "14px", borderRadius: "12px",
-                                    border: "1.5px solid #e2e8f0", background: "var(--surface)",
-                                    fontFamily: "inherit", fontWeight: 600, cursor: "pointer", color: "#64748b",
-                                    fontSize: "0.95rem",
-                                }}
-                            >
+                        <div className="co-sheet-footer">
+                            <button type="button" className="co-btn-secondary" onClick={() => setShowConfirmModal(false)}>
                                 رجوع
                             </button>
                             <button
                                 type="button"
+                                className="co-btn-primary"
                                 onClick={submitOrder}
                                 disabled={isSubmitting}
-                                style={{
-                                    flex: 2, padding: "14px", borderRadius: "12px",
-                                    border: "none", background: "#ff6b35", color: "white",
-                                    fontFamily: "inherit", fontWeight: 800, cursor: "pointer",
-                                    fontSize: "1rem", opacity: isSubmitting ? 0.7 : 1,
-                                    boxShadow: "0 6px 20px rgba(255,107,53,0.3)",
-                                }}
+                                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
                             >
-                                {isSubmitting ? "جاري الإرسال..." : "إرسال الطلب"}
+                                {isSubmitting ? <><span className="co-spinner" />جاري الإرسال...</> : "إرسال الطلب"}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Location change modal */}
+            {/* ── LOCATION MODAL (Bottom Sheet) ── */}
             {showLocModal && (
-                <div
-                    className="create-order-modal-backdrop"
-                    style={{
-                        position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        zIndex: 1000,
-                        padding: "max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))",
-                        boxSizing: "border-box",
-                        overflow: "hidden",
-                    }}
-                    onClick={() => setShowLocModal(false)}
-                >
-                    <div style={{
-                        background: "var(--surface)", borderRadius: "20px",
-                        padding: "24px 20px 32px", width: "100%",
-                        maxWidth: "min(520px, calc(100vw - 24px))",
-                        height: "min(720px, calc(100dvh - 24px))",
-                        maxHeight: "min(720px, calc(100dvh - 24px))",
-                        overflowY: "auto",
-                        boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
-                    }}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div style={{ fontWeight: 800, fontSize: "1.1rem", marginBottom: "20px", textAlign: "center" }}>
-                            تحديد موقع مختلف
-                        </div>
+                <div className="co-sheet-backdrop" onClick={() => setShowLocModal(false)}>
+                    <div className="co-sheet" onClick={(e) => e.stopPropagation()}>
+                        <div className="co-sheet-handle" />
+                        <div className="co-sheet-title">تحديد موقع مختلف</div>
 
-                        {/* GPS button */}
-                        <button
-                            type="button"
-                            onClick={getModalLocation}
-                            disabled={modalGpsLoading}
-                            style={{
-                                width: "100%", display: "flex", alignItems: "center",
-                                justifyContent: "center", gap: "10px", padding: "14px",
-                                borderRadius: "12px", border: "2px dashed",
-                                borderColor: modalGpsDone ? "#10b981" : "#ff6b35",
-                                background: modalGpsDone ? "#f0fdf4" : "#fff8f6",
-                                color: modalGpsDone ? "#065f46" : "#c2410c",
-                                fontFamily: "inherit", fontWeight: 700, fontSize: "1rem",
-                                cursor: modalGpsLoading ? "wait" : "pointer",
-                                marginBottom: "12px",
-                            }}
-                        >
-                            {modalGpsDone ? "✅" : "📍"}
-                            {modalGpsLoading
-                                ? "جاري تحديد موقعك..."
-                                : modalGpsDone
-                                    ? `تم (${modalCoords.lat.toFixed(4)}, ${modalCoords.lng.toFixed(4)})`
-                                    : "تحديد موقعي تلقائياً أولاً"}
-                        </button>
-
-                        {modalGpsError && (
-                            <div style={{ color: "#c62828", fontSize: "0.85rem", marginBottom: "10px", padding: "8px 12px", background: "#fff0f0", borderRadius: "8px" }}>
-                                {modalGpsError}
-                            </div>
-                        )}
-
-                        {modalGpsDone && (
-                            <>
-                                <select
-                                    className="form-input"
-                                    value={modalCity}
-                                    onChange={(e) => setModalCity(e.target.value)}
-                                    style={{ marginBottom: "12px" }}
-                                >
-                                    <option value="" disabled>اختر المدينة</option>
-                                    {CITY_OPTIONS.map((c) => (
-                                        <option key={c} value={c}>{c}</option>
-                                    ))}
-                                </select>
-                                <textarea
-                                    className="form-input"
-                                    style={{ minHeight: "80px", resize: "vertical" }}
-                                    placeholder="عنوان تفصيلي: الحي، الشارع، بجانب أي معلم، رقم البناء..."
-                                    value={modalDesc}
-                                    onChange={(e) => setModalDesc(e.target.value)}
-                                />
-                            </>
-                        )}
-
-                        <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+                        <div className="co-sheet-body">
+                            {/* GPS button */}
                             <button
                                 type="button"
-                                onClick={() => setShowLocModal(false)}
-                                style={{
-                                    flex: 1, padding: "12px", borderRadius: "12px",
-                                    border: "1.5px solid #e2e8f0", background: "var(--surface)",
-                                    fontFamily: "inherit", fontWeight: 600, cursor: "pointer", color: "#64748b",
-                                }}
+                                className={`co-gps-btn${modalGpsDone ? " co-gps-btn--done" : modalGpsLoading ? " co-gps-btn--loading" : " co-gps-btn--idle"}`}
+                                onClick={getModalLocation}
+                                disabled={modalGpsLoading}
                             >
-                                إلغاء
-                            </button>
-                            <button
-                                type="button"
-                                onClick={confirmCustomLocation}
-                                style={{
-                                    flex: 2, padding: "12px", borderRadius: "12px",
-                                    border: "none", background: "#ff6b35", color: "white",
-                                    fontFamily: "inherit", fontWeight: 700, cursor: "pointer",
-                                }}
-                            >
-                                تأكيد الموقع
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* ── TRACKING SCREEN — Pending ───────────────────────── */}
-            {trackingStatus === "pending" && (
-                <div style={{
-                    position: "fixed", inset: 0, background: "linear-gradient(135deg,#fff8f6 0%,var(--surface) 100%)",
-                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start",
-                    zIndex: 2000,
-                    padding: "max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))",
-                    textAlign: "center",
-                    boxSizing: "border-box",
-                    height: "100dvh",
-                    maxHeight: "100dvh",
-                    overflow: "hidden",
-                    overflowX: "hidden",
-                }}>
-                    <style>{`
-                        @keyframes pulse-ring {
-                            0% { transform: scale(0.9); opacity: 1; }
-                            100% { transform: scale(1.6); opacity: 0; }
-                        }
-                        @keyframes spin-dot {
-                            to { stroke-dashoffset: 0; }
-                        }
-                        /* دوائر ثابتة: لا تُضغط مع flex العمودي (تجنّب شكل بيضاوي) */
-                        .pulse-wrap {
-                            position: relative;
-                            width: 120px;
-                            height: 120px;
-                            min-width: 120px;
-                            min-height: 120px;
-                            aspect-ratio: 1;
-                            flex-shrink: 0;
-                            box-sizing: border-box;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                        }
-                        .pulse-ring {
-                            position: absolute;
-                            inset: 0;
-                            width: 100%;
-                            height: 100%;
-                            box-sizing: border-box;
-                            border-radius: 50%;
-                            border: 3px solid #ff6b35;
-                            animation: pulse-ring 1.5s ease-out infinite;
-                        }
-                        .pulse-ring:nth-child(2) { animation-delay: 0.5s; }
-                    `}</style>
-
-                    <div style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        width: "100%",
-                        maxWidth: "480px",
-                        margin: "0 auto",
-                        flex: "1 1 auto",
-                        minHeight: 0,
-                        overflow: "hidden",
-                        justifyContent: "center",
-                    }}>
-                    <div className="pulse-wrap">
-                        <div className="pulse-ring"></div>
-                        <div className="pulse-ring"></div>
-                        <div style={{
-                            width: 72,
-                            height: 72,
-                            minWidth: 72,
-                            minHeight: 72,
-                            aspectRatio: "1",
-                            flexShrink: 0,
-                            borderRadius: "50%",
-                            background: "linear-gradient(135deg,#ff6b35,#ff8c5a)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            boxShadow: "0 8px 24px rgba(255,107,53,0.4)",
-                        }}>
-                            <svg viewBox="0 0 24 24" width="36" height="36" fill="white">
-                                {isCallMode ? (
-                                    <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+                                {modalGpsDone ? (
+                                    <>
+                                        <svg viewBox="0 0 24 24" width="20" height="20" fill="#10b981">
+                                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                                        </svg>
+                                        تم — {modalCoords.lat.toFixed(4)}, {modalCoords.lng.toFixed(4)}
+                                    </>
+                                ) : modalGpsLoading ? (
+                                    <>
+                                        <span style={{ width: 18, height: 18, border: "2.5px solid #cbd5e1", borderTopColor: "#ff6b35", borderRadius: "50%", animation: "co-spin 0.7s linear infinite", display: "inline-block" }} />
+                                        جاري تحديد موقعك...
+                                    </>
                                 ) : (
-                                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                                    <>
+                                        <svg viewBox="0 0 24 24" width="20" height="20" fill="#ff6b35">
+                                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                                        </svg>
+                                        تحديد موقعي تلقائياً
+                                    </>
                                 )}
-                            </svg>
-                        </div>
-                    </div>
+                            </button>
 
-                    <h2 style={{
-                        fontSize: "clamp(1.15rem, 4vw, 1.5rem)",
-                        fontWeight: 800,
-                        color: "#1a1a2e",
-                        marginTop: "24px",
-                        marginBottom: "8px",
-                        flexShrink: 0,
-                        lineHeight: 1.35,
-                        paddingInline: "8px",
-                    }}>
-                        جاري البحث عن مندوب...
-                    </h2>
-                    <p style={{
-                        color: "#64748b",
-                        fontSize: "0.95rem",
-                        marginBottom: "24px",
-                        flexShrink: 0,
-                        lineHeight: 1.5,
-                        paddingInline: "8px",
-                    }}>
-                        {isCallMode
-                            ? "طلب تواصل في الانتظار، سيتم الاتصال بك هاتفيا بمجرد قبول المندوب"
-                            : "طلبك في الانتظار، سيتم إشعارك فور قبول مندوب لطلبك"}
-                    </p>
-
-                    <div style={{
-                        background: "var(--surface)",
-                        borderRadius: "16px",
-                        padding: "16px 18px 14px",
-                        boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-                        width: "100%",
-                        maxWidth: "min(440px, calc(100vw - 32px))",
-                        textAlign: "right",
-                        display: "flex",
-                        flexDirection: "column",
-                        flex: "1 1 auto",
-                        minHeight: 0,
-                        overflow: "hidden",
-                    }}>
-                        <div style={{
-                            fontSize: "0.75rem",
-                            color: "#ea580c",
-                            fontWeight: 700,
-                            marginBottom: "8px",
-                            letterSpacing: "0.05em",
-                            flexShrink: 0,
-                        }}>
-                            ملخص طلبك
-                        </div>
-                        <div style={{
-                            fontSize: "1.1rem",
-                            fontWeight: 800,
-                            color: "#1a1a2e",
-                            marginBottom: "10px",
-                            flexShrink: 0,
-                        }}>
-                            #{orderNumber}
-                        </div>
-                        <div
-                            style={{
-                                flex: 1,
-                                minHeight: 0,
-                                overflowY: "auto",
-                                WebkitOverflowScrolling: "touch",
-                                overscrollBehavior: "contain",
-                                paddingInlineEnd: "4px",
-                                marginInlineEnd: "-2px",
-                            }}
-                        >
-                            {orderItems.map((item, i) => (
-                                <div key={i} style={{
-                                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                                    gap: "8px",
-                                    padding: "8px 0", borderBottom: i < orderItems.length - 1 ? "1px solid #f1f5f9" : "none",
-                                    fontSize: "0.92rem", color: "#334155",
-                                }}>
-                                    <span style={{
-                                        background: "#fff0eb",
-                                        color: "#ea580c",
-                                        borderRadius: "6px",
-                                        padding: "2px 8px",
-                                        fontSize: "0.8rem",
-                                        fontWeight: 700,
-                                        flexShrink: 0,
-                                    }}>
-                                        × {item.quantity}
-                                    </span>
-                                    <span style={{ textAlign: "right", wordBreak: "break-word", minWidth: 0 }}>{item.name}</span>
+                            {modalGpsError && (
+                                <div className="co-error" style={{ marginBottom: 12 }}>
+                                    <svg viewBox="0 0 24 24" width="17" height="17">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+                                    </svg>
+                                    {modalGpsError}
                                 </div>
-                            ))}
+                            )}
+
+                            {modalGpsDone && (
+                                <>
+                                    <div className="co-form-label">المدينة</div>
+                                    <select
+                                        className="co-form-select"
+                                        value={modalCity}
+                                        onChange={(e) => setModalCity(e.target.value)}
+                                    >
+                                        <option value="" disabled>اختر المدينة</option>
+                                        {CITY_OPTIONS.map((c) => (
+                                            <option key={c} value={c}>{c}</option>
+                                        ))}
+                                    </select>
+
+                                    <div className="co-form-label">العنوان التفصيلي</div>
+                                    <textarea
+                                        className="co-form-textarea"
+                                        placeholder="الحي، الشارع، بجانب أي معلم، رقم البناء..."
+                                        value={modalDesc}
+                                        onChange={(e) => setModalDesc(toLatinNums(e.target.value))}
+                                    />
+                                </>
+                            )}
                         </div>
-                    </div>
 
-                    <p style={{
-                        marginTop: "20px",
-                        color: "#94a3b8",
-                        fontSize: "0.82rem",
-                        flexShrink: 0,
-                        paddingInline: "8px",
-                    }}>
-                        لا تغلق هذه الشاشة حتى يقبل المندوب طلبك
-                    </p>
-
-                    <button
-                        type="button"
-                        onClick={cancelOrder}
-                        style={{
-                            marginTop: "20px",
-                            padding: "12px 32px",
-                            borderRadius: "12px",
-                            border: "1.5px solid rgba(239, 68, 68, 0.4)",
-                            background: "rgba(239, 68, 68, 0.05)",
-                            color: "#ef4444",
-                            fontFamily: "inherit",
-                            fontWeight: 700,
-                            fontSize: "0.95rem",
-                            cursor: "pointer",
-                            transition: "all 0.2s",
-                            flexShrink: 0,
-                        }}
-                    >
-                        إلغاء الطلب
-                    </button>
+                        <div className="co-sheet-footer">
+                            <button type="button" className="co-btn-secondary" onClick={() => setShowLocModal(false)}>إلغاء</button>
+                            <button type="button" className="co-btn-primary" onClick={confirmCustomLocation}>تأكيد الموقع</button>
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* ── TRACKING SCREEN — Accepted ──────────────────────── */}
-            {trackingStatus === "accepted" && driverInfo && (
-                <div style={{
-                    position: "fixed", inset: 0, background: "linear-gradient(135deg,#f0fdf4 0%,var(--surface) 100%)",
-                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                    zIndex: 2000, padding: "24px", textAlign: "center", overflowY: "auto",
-                }}>
-                    <style>{`
-                        @keyframes pop-in {
-                            0% { transform: scale(0.5); opacity: 0; }
-                            70% { transform: scale(1.1); }
-                            100% { transform: scale(1); opacity: 1; }
-                        }
-                        .accepted-icon { animation: pop-in 0.5s ease-out forwards; }
-                    `}</style>
+            {/* ── TRACKING: PENDING ── */}
+            {trackingStatus === "pending" && (
+                <div className="co-tracking-wrap">
+                    <div className="co-tracking-inner">
+                        <div className="co-pulse-wrap">
+                            <div className="co-pulse-ring" />
+                            <div className="co-pulse-ring" />
+                            <div className="co-pulse-center">
+                                <svg viewBox="0 0 24 24" width="34" height="34">
+                                    {isCallMode
+                                        ? <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+                                        : <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                                    }
+                                </svg>
+                            </div>
+                        </div>
 
-                    <h2 style={{ fontSize: "1.35rem", fontWeight: 800, color: "#065f46", marginBottom: "14px" }}>
-                        تم قبول طلبك
-                    </h2>
+                        <div className="co-tracking-title">جاري البحث عن مندوب...</div>
+                        <div className="co-tracking-sub">
+                            {isCallMode
+                                ? "طلب تواصل في الانتظار، سيتم الاتصال بك هاتفياً بمجرد قبول المندوب"
+                                : "طلبك في الانتظار، سيتم إشعارك فور قبول مندوب لطلبك"
+                            }
+                        </div>
+
+                        <div className="co-tracking-card">
+                            <div className="co-tracking-card-header">
+                                <div className="co-tracking-card-label">ملخص طلبك</div>
+                                <div className="co-order-num-badge">#{orderNumber}</div>
+                            </div>
+                            <div className="co-tracking-list">
+                                {orderItems.map((item, i) => (
+                                    <div key={i} className="co-tracking-item">
+                                        <span className="co-tracking-qty">× {item.quantity}</span>
+                                        <span style={{ flex: 1, textAlign: "right", paddingRight: 6, wordBreak: "break-word" }}>{item.name}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="co-track-footer-note">لا تغلق هذه الشاشة حتى يقبل المندوب طلبك</div>
+
+                        <button type="button" className="co-cancel-btn" onClick={cancelOrder}>
+                            إلغاء الطلب
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* ── TRACKING: ACCEPTED ── */}
+            {trackingStatus === "accepted" && driverInfo && (
+                <div className="co-accepted-wrap">
+                    <div className="co-accepted-icon">
+                        <svg viewBox="0 0 24 24" width="44" height="44">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                        </svg>
+                    </div>
+
+                    <div className="co-accepted-title">تم قبول طلبك! 🎉</div>
 
                     {/* Driver card */}
-                    <div style={{
-                        background: "var(--surface)", borderRadius: "20px", padding: "20px 18px",
-                        boxShadow: "0 6px 26px rgba(0,0,0,0.08)", width: "100%", maxWidth: "420px",
-                        textAlign: "right", marginBottom: "18px",
-                    }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "10px", marginBottom: "14px" }}>
-                            <div style={{ fontSize: "0.72rem", color: "#10b981", fontWeight: 800, letterSpacing: "0.04em" }}>
-                                معلومات المندوب
-                            </div>
-                        </div>
-
-                        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                            <div style={{
-                                width: 52, height: 52, borderRadius: "50%",
-                                background: "linear-gradient(135deg,#ff6b35,#ff8c5a)",
-                                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                            }}>
-                                <svg viewBox="0 0 24 24" width="26" height="26" fill="white">
+                    <div className="co-driver-card">
+                        <div className="co-driver-label">معلومات المندوب</div>
+                        <div className="co-driver-row">
+                            <div className="co-driver-avatar">
+                                <svg viewBox="0 0 24 24" width="26" height="26">
                                     <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
                                 </svg>
                             </div>
                             <div>
-                                <div style={{ fontWeight: 900, fontSize: "1.12rem", color: "#1a1a2e" }}>{driverInfo.name}</div>
+                                <div className="co-driver-name">{driverInfo.name}</div>
                                 {driverInfo.phone && (
-                                    <div style={{ color: "#64748b", fontSize: "0.88rem", marginTop: "2px" }} dir="ltr">{driverInfo.phone}</div>
+                                    <div className="co-driver-phone" dir="ltr">{driverInfo.phone}</div>
                                 )}
                             </div>
                         </div>
                     </div>
 
                     {/* Order summary */}
-                    <div style={{
-                        background: "var(--surface)", borderRadius: "16px", padding: "20px 24px",
-                        boxShadow: "0 4px 20px rgba(0,0,0,0.06)", width: "100%", maxWidth: "420px",
-                        textAlign: "right", marginBottom: "22px",
-                    }}>
-                        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "12px", marginBottom: "12px" }}>
-                            <div style={{ fontSize: "0.82rem", color: "#475569", fontWeight: 900 }}>
-                                ملخص الطلب
-                            </div>
-                            <div style={{ background: "#fff0eb", color: "#ff6b35", borderRadius: "999px", padding: "6px 12px", fontWeight: 900, fontSize: "0.85rem" }}>
-                                #{orderNumber}
-                            </div>
+                    <div className="co-accepted-summary">
+                        <div className="co-accepted-summary-header">
+                            <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#475569" }}>ملخص الطلب</div>
+                            <div className="co-order-num-badge">#{orderNumber}</div>
                         </div>
                         {orderItems.map((item, i) => (
-                            <div key={i} style={{
-                                display: "flex", justifyContent: "space-between", alignItems: "center",
-                                padding: "8px 0",
-                                borderBottom: i < orderItems.length - 1 ? "1px solid #f1f5f9" : "none",
-                                fontSize: "0.92rem", color: "#334155",
-                            }}>
-                                <span style={{ color: "#475569", fontWeight: 800 }}>{item.name}</span>
-                                <span style={{ background: "#f0fdf4", color: "#059669", borderRadius: "999px", padding: "3px 10px", fontSize: "0.8rem", fontWeight: 900 }}>
-                                    × {item.quantity}
-                                </span>
+                            <div key={i} className="co-summary-item">
+                                <span style={{ background: "#f0fdf4", color: "#059669", borderRadius: 8, padding: "3px 10px", fontSize: "0.8rem", fontWeight: 800 }}>× {item.quantity}</span>
+                                <span style={{ flex: 1, textAlign: "right", paddingRight: 8, color: "#334155", fontWeight: 600 }}>{item.name}</span>
                             </div>
                         ))}
                     </div>
 
-                    <Link href="/track-order">
-                        <button
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                gap: "10px",
-                                padding: "16px 22px",
-                                borderRadius: "14px",
-                                border: "none",
-                                background: "linear-gradient(135deg,#10b981,#059669)",
-                                color: "white",
-                                fontFamily: "inherit",
-                                fontWeight: 900,
-                                fontSize: "1rem",
-                                cursor: "pointer",
-                                boxShadow: "0 6px 20px rgba(16,185,129,0.3)",
-                                width: "100%",
-                                maxWidth: "420px",
-                            }}
-                        >
-                            <svg
-                                viewBox="0 0 24 24"
-                                width="18"
-                                height="18"
-                                fill="none"
-                                stroke="white"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                aria-hidden="true"
-                            >
-                                <path d="M12 21s-6.5-4.2-6.5-10a6.5 6.5 0 0 1 13 0c0 5.8-6.5 10-6.5 10z" />
-                                <path d="M12 11.2a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4z" />
-                            </svg>
-                            تتبع الطلب
-                        </button>
+                    <Link href="/track-order" className="co-track-btn">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 21s-6.5-4.2-6.5-10a6.5 6.5 0 0 1 13 0c0 5.8-6.5 10-6.5 10z" />
+                            <circle cx="12" cy="11" r="2.2" />
+                        </svg>
+                        تتبع الطلب
                     </Link>
                 </div>
             )}
@@ -1118,19 +1373,25 @@ export default function CreateOrder() {
     return (
         <Suspense
             fallback={
-                <div
-                    className="page-wrapper"
-                    style={{
-                        minHeight: "50vh",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: 24,
-                        fontFamily: "inherit",
-                        color: "var(--text-muted, #64748b)",
-                        fontWeight: 700,
-                    }}
-                >
+                <div style={{
+                    minHeight: "100dvh",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: "#f7f8fa",
+                    fontFamily: "inherit",
+                    color: "#94a3b8",
+                    fontWeight: 700,
+                    flexDirection: "column",
+                    gap: 12,
+                }}>
+                    <div style={{
+                        width: 40, height: 40,
+                        border: "3px solid #fee2d4",
+                        borderTopColor: "#ff6b35",
+                        borderRadius: "50%",
+                        animation: "co-spin 0.7s linear infinite",
+                    }} />
                     جاري التحميل...
                 </div>
             }
