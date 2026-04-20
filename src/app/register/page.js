@@ -4,7 +4,9 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { getTokenOrRedirect, getCurrentUserIdToken } from "@/lib/clientAuth";
 import { isStrongPassword } from "@/lib/auth/profileValidation";
 
@@ -137,7 +139,8 @@ export default function Register() {
                 localStorage.setItem("yaslamo_user", JSON.stringify({
                     ...data.user, city: city.trim(), locationDesc: locationDesc.trim(), locationCoords,
                 }));
-                router.push("/login");
+                window.dispatchEvent(new Event("yaslamo_auth"));
+                router.push("/home");
 
             } else if (isGoogleMode) {
                 // ── إنشاء ملف شخصي لمستخدم Google ───────────────
@@ -201,9 +204,30 @@ export default function Register() {
                 });
                 const data = await res.json();
                 if (!res.ok) { setError(data.error || "حدث خطأ"); setLoading(false); return; }
-                localStorage.removeItem("yaslamo_user");
+
+                // تسجيل الدخول تلقائياً بعد إنشاء الحساب
+                const cleanPhone = phone.trim().replace(/\s/g, "");
+                const email = `${cleanPhone}@yaslamo.app`;
+                const cred = await signInWithEmailAndPassword(auth, email, password);
+
+                // جلب بيانات الملف الشخصي من Firestore
+                const profileSnap = await getDoc(doc(db, "users", cred.user.uid));
+                const profile = profileSnap.exists() ? profileSnap.data() : data.user;
+
+                localStorage.setItem("yaslamo_user", JSON.stringify({
+                    id: cred.user.uid,
+                    name: profile.name,
+                    phone: profile.phone,
+                    address: profile.address,
+                    email,
+                    city: profile.city || "",
+                    locationDesc: profile.locationDesc || "",
+                    locationCoords: profile.locationCoords || null,
+                    customerStatus: profile.customerStatus || null,
+                    role: profile.role || "customer",
+                }));
                 window.dispatchEvent(new Event("yaslamo_auth"));
-                router.push("/login");
+                router.push("/home");
             }
         } catch (err) {
             console.error(err);

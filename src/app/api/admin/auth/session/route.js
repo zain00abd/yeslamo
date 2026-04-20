@@ -56,7 +56,7 @@ export async function POST(request) {
             secure: process.env.NODE_ENV === "production",
             sameSite: "lax",
             path: "/",
-            maxAge: 60 * 60 * 24,
+            maxAge: 60 * 60 * 24 * 365, // 1 year — matches JWT expiry
         });
         return res;
     } catch (e) {
