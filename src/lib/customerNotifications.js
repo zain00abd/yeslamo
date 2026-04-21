@@ -59,6 +59,24 @@ export function markAllNotificationsRead() {
     emitNotificationsChanged();
 }
 
+export function markNotificationRead(id) {
+    if (typeof window === "undefined") return;
+    const uid = getCurrentUid();
+    const key = keyFor(uid, "list");
+    const list = getCustomerNotifications().map((n) =>
+        n.id === id ? { ...n, read: true } : n
+    );
+    writeJson(key, list);
+    emitNotificationsChanged();
+}
+
+export function clearAllNotifications() {
+    if (typeof window === "undefined") return;
+    const uid = getCurrentUid();
+    writeJson(keyFor(uid, "list"), []);
+    emitNotificationsChanged();
+}
+
 export function pushCustomerNotification(notification) {
     if (typeof window === "undefined") return null;
     const uid = getCurrentUid();

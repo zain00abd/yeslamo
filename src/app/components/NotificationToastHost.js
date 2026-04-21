@@ -1,48 +1,58 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { getCustomerNotifications, notificationsEventName } from "@/lib/customerNotifications";
 
-function isCustomerArea(pathname) {
+/* الصفحات التي لا تظهر فيها التوست */
+const BLOCKED_PATHS = ["/create-order", "/dashboard", "/driver", "/login", "/register"];
+
+function shouldShow(pathname) {
     if (!pathname) return false;
-    if (pathname.startsWith("/dashboard")) return false;
-    if (pathname.startsWith("/driver")) return false;
-    if (pathname.startsWith("/login")) return false;
-    if (pathname.startsWith("/register")) return false;
-    return true;
+    return !BLOCKED_PATHS.some((p) => pathname === p || pathname.startsWith(p + "?") || pathname.startsWith(p + "/"));
 }
 
+/* لون ونمط كل حالة */
+const STATUS_STYLE = {
+    pending:    { accent: "#f59e0b", bg: "#fffbeb", icon: "⏳" },
+    accepted:   { accent: "#2563eb", bg: "#eff6ff", icon: "✅" },
+    on_the_way: { accent: "#7c3aed", bg: "#f5f3ff", icon: "🚗" },
+    delivered:  { accent: "#059669", bg: "#ecfdf5", icon: "📦" },
+    cancelled:  { accent: "#dc2626", bg: "#fef2f2", icon: "❌" },
+};
+const DEFAULT_STYLE = { accent: "#ff6b35", bg: "#fff7f3", icon: "🔔" };
+
+function getStyle(n) {
+    return STATUS_STYLE[n?.status] || DEFAULT_STYLE;
+}
+
+const TOAST_DURATION = 5500; // ms
+
 export default function NotificationToastHost() {
+    const pathname = usePathname();
     const [toast, setToast] = useState(null);
+    const [exiting, setExiting] = useState(false);
+    const [progress, setProgress] = useState(100);
     const hideTimerRef = useRef(null);
+    const progressRef = useRef(null);
     const initializedRef = useRef(false);
 
-    const canShow = useMemo(() => {
-        if (typeof window === "undefined") return false;
-        const path = window.location.pathname || "";
-        return isCustomerArea(path);
-    }, [toast?.id]);
-
+    /* استمع لإشعارات جديدة */
     useEffect(() => {
         if (typeof window === "undefined") return;
+
         const initial = getCustomerNotifications();
-        const first = initial[0] || null;
-        if (first) {
-            // أول تحميل: لا نعرض توست قديم.
-            initializedRef.current = true;
-        }
+        if (initial.length > 0) initializedRef.current = true;
 
         const onNotifications = () => {
             const list = getCustomerNotifications();
             const latest = list[0] || null;
             if (!latest) return;
-            if (!initializedRef.current) {
-                initializedRef.current = true;
-                return;
-            }
-            // نعرض فقط الإشعار غير المقروء.
+            if (!initializedRef.current) { initializedRef.current = true; return; }
             if (latest.read) return;
+            setExiting(false);
+            setProgress(100);
             setToast(latest);
         };
 
@@ -54,92 +64,85 @@ export default function NotificationToastHost() {
         };
     }, []);
 
+    /* مؤقت الإخفاء التلقائي + شريط التقدم */
     useEffect(() => {
         if (!toast) return;
-        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-        hideTimerRef.current = setTimeout(() => {
-            setToast(null);
-        }, 5000);
-        return () => {
-            if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-        };
+
+        clearTimers();
+
+        const startTime = Date.now();
+        progressRef.current = setInterval(() => {
+            const elapsed = Date.now() - startTime;
+            const pct = Math.max(0, 100 - (elapsed / TOAST_DURATION) * 100);
+            setProgress(pct);
+        }, 40);
+
+        hideTimerRef.current = setTimeout(dismiss, TOAST_DURATION);
+
+        return clearTimers;
     }, [toast]);
 
-    if (!toast || !canShow) return null;
+    function clearTimers() {
+        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+        if (progressRef.current) clearInterval(progressRef.current);
+    }
+
+    function dismiss() {
+        setExiting(true);
+        setTimeout(() => { setToast(null); setExiting(false); }, 280);
+    }
+
+    if (!toast || !shouldShow(pathname)) return null;
+
+    const s = getStyle(toast);
 
     return (
         <div
-            style={{
-                position: "fixed",
-                top: "max(12px, env(safe-area-inset-top, 0px))",
-                left: 0,
-                right: 0,
-                zIndex: 3600,
-                display: "flex",
-                justifyContent: "center",
-                pointerEvents: "none",
-                padding: "0 12px",
-            }}
+            className={`nt-host${exiting ? " nt-host--exit" : ""}`}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
         >
             <div
-                role="status"
-                aria-live="polite"
-                style={{
-                    width: "min(460px, 100%)",
-                    borderRadius: "14px",
-                    border: "1px solid rgba(14, 116, 144, 0.22)",
-                    background: "rgba(255,255,255,0.96)",
-                    boxShadow: "0 12px 32px rgba(15, 23, 42, 0.22)",
-                    backdropFilter: "blur(10px)",
-                    WebkitBackdropFilter: "blur(10px)",
-                    overflow: "hidden",
-                    pointerEvents: "auto",
-                    animation: "yaslamoToastIn 220ms ease-out",
-                }}
+                className="nt-card"
+                style={{ "--nt-accent": s.accent, "--nt-bg": s.bg }}
             >
-                <div style={{ padding: "10px 12px 4px", fontWeight: 900, fontSize: "0.83rem", color: "#0f172a" }}>
-                    {toast.title || "إشعار جديد"}
-                </div>
-                <div style={{ padding: "0 12px 10px", fontWeight: 700, lineHeight: 1.5, fontSize: "0.86rem", color: "#334155" }}>
-                    {toast.body}
-                </div>
-                <div
-                    style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: "8px",
-                        borderTop: "1px solid #e2e8f0",
-                        padding: "8px 10px",
-                    }}
-                >
-                    <Link href="/notifications" style={{ fontSize: "0.78rem", fontWeight: 800, color: "#0369a1", textDecoration: "underline" }}>
-                        فتح مركز الإشعارات
-                    </Link>
+                {/* خط ملون جانبي */}
+                <span className="nt-accent-bar" aria-hidden="true" />
+
+                {/* أيقونة */}
+                <span className="nt-icon" aria-hidden="true">{s.icon}</span>
+
+                {/* النص */}
+                <div className="nt-content">
+                    <strong className="nt-title">{toast.title || "إشعار جديد"}</strong>
+                    <p className="nt-body">{toast.body}</p>
                     {toast.orderId ? (
-                        <Link href="/track-order" style={{ fontSize: "0.78rem", fontWeight: 800, color: "#2563eb", textDecoration: "underline" }}>
-                            عرض الطلب
+                        <Link href="/track-order" className="nt-link" onClick={dismiss}>
+                            تتبع الطلب ←
                         </Link>
-                    ) : (
-                        <button
-                            type="button"
-                            onClick={() => setToast(null)}
-                            style={{
-                                border: "none",
-                                background: "transparent",
-                                color: "#64748b",
-                                fontFamily: "inherit",
-                                fontWeight: 800,
-                                fontSize: "0.78rem",
-                                cursor: "pointer",
-                            }}
-                        >
-                            إخفاء
-                        </button>
-                    )}
+                    ) : null}
                 </div>
+
+                {/* زر الإغلاق */}
+                <button
+                    type="button"
+                    className="nt-close"
+                    onClick={dismiss}
+                    aria-label="إغلاق الإشعار"
+                >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                </button>
+
+                {/* شريط التقدم */}
+                <span
+                    className="nt-progress"
+                    style={{ width: `${progress}%` }}
+                    aria-hidden="true"
+                />
             </div>
-            <style>{`@keyframes yaslamoToastIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
         </div>
     );
 }

@@ -327,54 +327,7 @@ export default function MyOrderPage() {
                     </div>
                 </div>
 
-                {/* ── Delivery Time ── */}
-                <div style={{ background: "var(--surface)", borderRadius: "20px", padding: "18px 20px", marginBottom: 12, boxShadow: "0 2px 16px rgba(0,0,0,0.06)" }}>
-                    <div style={{ fontSize: "0.78rem", color: "#aaa", fontWeight: 700, marginBottom: 4 }}>وقت التوصيل المتوقع</div>
-                    <div style={{ fontWeight: 800, fontSize: "1.4rem", color: "#1a1a2e" }}>٣٠ - ٤٥ دقيقة</div>
-                </div>
-
-                {/* ── Order Info ── */}
-                <div style={{ background: "var(--surface)", borderRadius: "20px", padding: "18px 20px", marginBottom: 12, boxShadow: "0 2px 16px rgba(0,0,0,0.06)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-                        <div>
-                            <div style={{ fontSize: "0.78rem", color: "#aaa", fontWeight: 700 }}>رقم الطلب</div>
-                            <div style={{ fontWeight: 800, color: "#1a1a2e", marginTop: 2 }}>#{order.orderNumber?.replace("ORD-", "")}</div>
-                        </div>
-                        <div style={{ textAlign: "start" }}>
-                            <div style={{ fontSize: "0.78rem", color: "#aaa", fontWeight: 700 }}>تاريخ الطلب</div>
-                            <div style={{ fontWeight: 700, color: "#555", marginTop: 2, fontSize: "0.85rem" }}>{formatDate(order.createdAt)}</div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* ── Address ── */}
-                <div style={{ background: "var(--surface)", borderRadius: "20px", padding: "18px 20px", marginBottom: 12, boxShadow: "0 2px 16px rgba(0,0,0,0.06)" }}>
-                    <div style={{ fontSize: "0.78rem", color: "#aaa", fontWeight: 700, marginBottom: 6 }}>عنوان التوصيل</div>
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="#ff6b35" style={{ flexShrink: 0, marginTop: 2 }}>
-                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-                        </svg>
-                        <div style={{ fontWeight: 700, color: "#1a1a2e", fontSize: "0.95rem", lineHeight: 1.5 }}>{order.customerAddress}</div>
-                    </div>
-                </div>
-
-                {/* ── Items Summary ── */}
-                <div style={{ background: "var(--surface)", borderRadius: "20px", padding: "18px 20px", marginBottom: 12, boxShadow: "0 2px 16px rgba(0,0,0,0.06)" }}>
-                    <div style={{ fontWeight: 800, fontSize: "1rem", color: "#1a1a2e", marginBottom: 14 }}>ملخص الطلب</div>
-                    {order.items?.map((item, i) => (
-                        <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < order.items.length - 1 ? "1px solid #f5f5f5" : "none" }}>
-                            <span style={{ fontWeight: 700, color: "#ff6b35", fontSize: "0.9rem" }}>× {item.quantity}</span>
-                            <span style={{ fontWeight: 600, color: "#333", fontSize: "0.95rem" }}>{item.name}</span>
-                        </div>
-                    ))}
-                    {order.notes && (
-                        <div style={{ marginTop: 12, padding: "10px 14px", background: "#fffbeb", borderRadius: "10px", border: "1px solid #fde68a", fontSize: "0.9rem", color: "#b45309", fontWeight: 600 }}>
-                            📝 {order.notes}
-                        </div>
-                    )}
-                </div>
-
-                {/* ── السعر (بعد تسعير المندوب عند «في الطريق») ── */}
+                {/* ── السعر (بعد تسعير المندوب عند «في الطريق» أو «تم التوصيل») ── */}
                 {(order.status === "on_the_way" || order.status === "delivered") &&
                     typeof order.itemsPurchaseSyp === "number" && (
                         <div
@@ -407,6 +360,72 @@ export default function MyOrderPage() {
                             </div>
                         </div>
                     )}
+
+                {/* ── معلومات الطلب (رقم + تاريخ + عنوان + وقت) في بوكس واحد ── */}
+                <div style={{ background: "var(--surface)", borderRadius: "20px", padding: "18px 20px", marginBottom: 12, boxShadow: "0 2px 16px rgba(0,0,0,0.06)" }}>
+
+                    {/* صف: رقم الطلب + تاريخه */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, paddingBottom: 14, borderBottom: "1px solid #f0f0f0" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ width: 36, height: 36, borderRadius: 11, background: "#fff3ed", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#ff6b35" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: "0.72rem", color: "#aaa", fontWeight: 700 }}>رقم الطلب</div>
+                                <div style={{ fontWeight: 900, color: "#ff6b35", fontSize: "1rem", marginTop: 1 }}>#{order.orderNumber?.replace("ORD-", "")}</div>
+                            </div>
+                        </div>
+                        <div style={{ textAlign: "end" }}>
+                            <div style={{ fontSize: "0.72rem", color: "#aaa", fontWeight: 700 }}>تاريخ الطلب</div>
+                            <div style={{ fontWeight: 700, color: "#475569", marginTop: 1, fontSize: "0.82rem" }}>{formatDate(order.createdAt)}</div>
+                        </div>
+                    </div>
+
+                    {/* صف: عنوان التوصيل */}
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 10, paddingTop: 14, paddingBottom: 14, borderBottom: "1px solid #f0f0f0" }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 11, background: "#fff3ed", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#ff6b35" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 22s7-4.5 7-10a7 7 0 1 0-14 0c0 5.5 7 10 7 10z"/><circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: "0.72rem", color: "#aaa", fontWeight: 700, marginBottom: 2 }}>عنوان التوصيل</div>
+                            <div style={{ fontWeight: 700, color: "#1a1a2e", fontSize: "0.95rem", lineHeight: 1.5 }}>{order.customerAddress}</div>
+                        </div>
+                    </div>
+
+                    {/* صف: وقت التوصيل */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 14 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 11, background: "#fff3ed", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#ff6b35" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: "0.72rem", color: "#aaa", fontWeight: 700 }}>وقت التوصيل المتوقع</div>
+                            <div style={{ fontWeight: 800, fontSize: "1rem", color: "#1a1a2e", marginTop: 1 }}>٣٠ – ٤٥ دقيقة</div>
+                        </div>
+                    </div>
+
+                </div>
+
+                {/* ── Items Summary ── */}
+                <div style={{ background: "var(--surface)", borderRadius: "20px", padding: "18px 20px", marginBottom: 12, boxShadow: "0 2px 16px rgba(0,0,0,0.06)" }}>
+                    <div style={{ fontWeight: 800, fontSize: "1rem", color: "#1a1a2e", marginBottom: 14 }}>ملخص الطلب</div>
+                    {order.items?.map((item, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < order.items.length - 1 ? "1px solid #f5f5f5" : "none" }}>
+                            <span style={{ fontWeight: 700, color: "#ff6b35", fontSize: "0.9rem" }}>× {item.quantity}</span>
+                            <span style={{ fontWeight: 600, color: "#333", fontSize: "0.95rem" }}>{item.name}</span>
+                        </div>
+                    ))}
+                    {order.notes && (
+                        <div style={{ marginTop: 12, padding: "10px 14px", background: "#fffbeb", borderRadius: "10px", border: "1px solid #fde68a", fontSize: "0.9rem", color: "#b45309", fontWeight: 600 }}>
+                            📝 {order.notes}
+                        </div>
+                    )}
+                </div>
 
                 {/* ── Cancel Button ── */}
                 {canCancel && (
