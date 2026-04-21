@@ -25,7 +25,7 @@ function formatWhen(iso) {
     if (diffHr < 48) return "أمس";
     const diffDays = Math.floor(diffHr / 24);
     if (diffDays < 7) return `منذ ${diffDays} أيام`;
-    return d.toLocaleDateString("ar-EG", { day: "numeric", month: "short" });
+    return d.toLocaleDateString("ar-EG-u-nu-latn", { day: "numeric", month: "short" });
 }
 
 /* ───────── تسمية التاريخ للمجموعة ───────── */
@@ -37,7 +37,7 @@ function dateGroupLabel(iso) {
     const startOfYesterday = new Date(startOfToday.getTime() - 864e5);
     if (d >= startOfToday) return "اليوم";
     if (d >= startOfYesterday) return "أمس";
-    return d.toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long" });
+    return d.toLocaleDateString("ar-EG-u-nu-latn", { weekday: "long", day: "numeric", month: "long" });
 }
 
 /* ───────── إعداد اللون والأيقونة حسب الحالة ───────── */

@@ -70,8 +70,8 @@ function pickActiveOrder(docs) {
 function formatDate(iso) {
     if (!iso) return "—";
     const d = new Date(iso);
-    return d.toLocaleDateString("ar-EG", { day: "numeric", month: "long", year: "numeric" }) +
-        "  " + d.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleDateString("ar-EG-u-nu-latn", { day: "numeric", month: "long", year: "numeric" }) +
+        "  " + d.toLocaleTimeString("ar-EG-u-nu-latn", { hour: "2-digit", minute: "2-digit" });
 }
 
 export default function MyOrderPage() {
@@ -349,15 +349,31 @@ export default function MyOrderPage() {
                                 <span style={{ color: "#666", fontWeight: 600 }}>رسوم التوصيل</span>
                                 <span style={{ fontWeight: 800, color: "#1a1a2e", fontVariantNumeric: "tabular-nums" }}>{getDeliveryFeeForOrder(order)} ل.س</span>
                             </div>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, marginTop: 4 }}>
-                                <span style={{ fontWeight: 900, fontSize: "1.05rem", color: "#1a1a2e" }}>الإجمالي</span>
-                                <span style={{ fontWeight: 900, fontSize: "1.35rem", color: "#ea580c", fontVariantNumeric: "tabular-nums" }}>
-                                    {typeof order.totalDueSyp === "number"
-                                        ? order.totalDueSyp
-                                        : order.itemsPurchaseSyp + getDeliveryFeeForOrder(order)}{" "}
-                                    <span style={{ fontSize: "0.85rem", fontWeight: 800 }}>ل.س</span>
-                                </span>
-                            </div>
+                            {(() => {
+                                const totalNew = typeof order.totalDueSyp === "number"
+                                    ? order.totalDueSyp
+                                    : order.itemsPurchaseSyp + getDeliveryFeeForOrder(order);
+                                const totalOld = totalNew * 100;
+                                return (
+                                    <div style={{ paddingTop: 12, marginTop: 4 }}>
+                                        {/* صف الإجمالي */}
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                                            <span style={{ fontWeight: 900, fontSize: "1.05rem", color: "#1a1a2e" }}>الإجمالي</span>
+                                            <div style={{ textAlign: "end" }}>
+                                                <div style={{ fontWeight: 900, fontSize: "1.35rem", color: "#ea580c", fontVariantNumeric: "tabular-nums", lineHeight: 1.2 }}>
+                                                    {totalNew} <span style={{ fontSize: "0.82rem", fontWeight: 800 }}>ل.س جديدة</span>
+                                                </div>
+                                                <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 5, justifyContent: "flex-end" }}>
+                                                    <span style={{ fontSize: "0.88rem", fontWeight: 900, color: "#64748b", fontVariantNumeric: "tabular-nums" }}>
+                                                        {totalOld.toLocaleString("en-US")}
+                                                    </span>
+                                                    <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#94a3b8" }}>ل.س قديمة</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
                     )}
 
@@ -405,7 +421,7 @@ export default function MyOrderPage() {
                         </div>
                         <div>
                             <div style={{ fontSize: "0.72rem", color: "#aaa", fontWeight: 700 }}>وقت التوصيل المتوقع</div>
-                            <div style={{ fontWeight: 800, fontSize: "1rem", color: "#1a1a2e", marginTop: 1 }}>٣٠ – ٤٥ دقيقة</div>
+                            <div style={{ fontWeight: 800, fontSize: "1rem", color: "#1a1a2e", marginTop: 1 }}>30 – 45 دقيقة</div>
                         </div>
                     </div>
 

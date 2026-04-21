@@ -158,7 +158,7 @@ export default function AdminOrdersPage() {
                                         <td>{o.areaId || "—"}</td>
                                         <td style={{ whiteSpace: "nowrap", fontSize: "0.8rem" }}>
                                             {o.createdAt
-                                                ? new Date(o.createdAt).toLocaleString("ar-SY", { dateStyle: "short", timeStyle: "short" })
+                                                ? new Date(o.createdAt).toLocaleString("ar-SY-u-nu-latn", { dateStyle: "short", timeStyle: "short" })
                                                 : "—"}
                                         </td>
                                         <td style={{ whiteSpace: "nowrap" }}>

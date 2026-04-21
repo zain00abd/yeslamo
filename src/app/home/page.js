@@ -276,11 +276,11 @@ function formatRecentWhen(iso) {
     const now = new Date();
     const diffMs = now.getTime() - d.getTime();
     const diffDays = Math.floor(diffMs / 864e5);
-    if (diffDays < 0) return d.toLocaleDateString("ar-EG", { day: "numeric", month: "short" });
+    if (diffDays < 0) return d.toLocaleDateString("ar-EG-u-nu-latn", { day: "numeric", month: "short" });
     if (diffDays === 0) return "اليوم";
     if (diffDays === 1) return "أمس";
     if (diffDays < 7) return `منذ ${diffDays} أيام`;
-    return d.toLocaleDateString("ar-EG", { day: "numeric", month: "short", year: "numeric" });
+    return d.toLocaleDateString("ar-EG-u-nu-latn", { day: "numeric", month: "short", year: "numeric" });
 }
 
 export default function HomePage() {

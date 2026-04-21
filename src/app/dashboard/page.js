@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 function fmtTime(iso) {
     if (!iso) return "—";
     try {
-        return new Date(iso).toLocaleString("ar-SY", { dateStyle: "short", timeStyle: "short" });
+        return new Date(iso).toLocaleString("ar-SY-u-nu-latn", { dateStyle: "short", timeStyle: "short" });
     } catch {
         return "—";
     }
@@ -13,7 +13,7 @@ function fmtTime(iso) {
 
 function fmtMoney(n) {
     if (typeof n !== "number" || Number.isNaN(n)) return "—";
-    return n.toLocaleString("ar-SY", { maximumFractionDigits: 2 });
+    return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
 export default function DashboardHomePage() {
