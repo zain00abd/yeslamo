@@ -1,15 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Bike } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
-import { getCurrentUserIdToken } from "@/lib/clientAuth";
 import { showAppAlert } from "@/lib/appAlert";
 import { showAppConfirm } from "@/lib/appConfirm";
-import { doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where, orderBy, limit, updateDoc } from "firebase/firestore";
 import { getDeliveryFeeForOrder } from "@/lib/orderPricing";
 import { syncOrderStatusNotification } from "@/lib/customerNotifications";
 
@@ -55,6 +54,19 @@ function getStepIndex(status) {
     return STEPS.findIndex((s) => s.key === key);
 }
 
+const PRIORITY = { pending: 4, accepted: 3, on_the_way: 2, delivered: 1 };
+
+function pickActiveOrder(docs) {
+    let best = null;
+    for (const order of docs) {
+        if (order.status === "cancelled") continue;
+        if (!best || (PRIORITY[order.status] || 0) > (PRIORITY[best.status] || 0)) {
+            best = order;
+        }
+    }
+    return best;
+}
+
 function formatDate(iso) {
     if (!iso) return "—";
     const d = new Date(iso);
@@ -68,41 +80,19 @@ export default function MyOrderPage() {
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [cancelling, setCancelling] = useState(false);
-    const unsubRef = useRef(null);
-    const prevStatusRef = useRef(null);
+    // Tracks { id, status } of the last seen active order for status-change notifications
+    const prevOrderRef = useRef(null);
 
-    const startListener = useCallback((orderId) => {
-        if (unsubRef.current) unsubRef.current();
-        const unsub = onSnapshot(doc(db, "orders", orderId), (snap) => {
-            if (!snap.exists()) return;
-            const data = snap.data();
-            const nextStatus = data.status || null;
-            const prevStatus = prevStatusRef.current;
-            if (nextStatus && prevStatus && nextStatus !== prevStatus) {
-                syncOrderStatusNotification({
-                    id: orderId,
-                    orderNumber: data.orderNumber || null,
-                    status: nextStatus,
-                });
-            }
-            prevStatusRef.current = nextStatus;
-            setOrder((prev) => ({
-                ...prev,
-                ...data,
-                createdAt: data.createdAt?.toDate?.()?.toISOString() || prev?.createdAt,
-                updatedAt: data.updatedAt?.toDate?.()?.toISOString() || prev?.updatedAt,
-            }));
-        });
-        unsubRef.current = unsub;
-    }, []);
-
-    // انتظار جلسة Firebase Auth قبل مستمع Firestore (تجنّب permission-denied عند تحميل الصفحة)
     useEffect(() => {
+        let unsub = null;
         let cancelled = false;
 
         (async () => {
+            // Wait for Firebase Auth to resolve before touching Firestore
+            // (avoids permission-denied on first render)
             await auth.authStateReady();
             if (cancelled) return;
+
             if (!auth.currentUser) {
                 router.replace("/login");
                 setLoading(false);
@@ -112,54 +102,74 @@ export default function MyOrderPage() {
             let uid;
             try {
                 const stored = localStorage.getItem("yaslamo_user");
-                if (!stored) {
-                    router.replace("/login");
-                    setLoading(false);
-                    return;
-                }
+                if (!stored) { router.replace("/login"); setLoading(false); return; }
                 const parsed = JSON.parse(stored);
+                if (parsed.id !== auth.currentUser.uid) { router.replace("/login"); setLoading(false); return; }
                 uid = parsed.id;
-                if (parsed.id !== auth.currentUser.uid) {
-                    router.replace("/login");
-                    setLoading(false);
-                    return;
-                }
-                setUser(parsed);
+                if (!cancelled) setUser(parsed);
             } catch {
                 router.replace("/login");
                 setLoading(false);
                 return;
             }
 
-            try {
-                const token = await getCurrentUserIdToken();
-                if (!token) {
-                    router.replace("/login");
-                    if (!cancelled) setLoading(false);
-                    return;
-                }
-                const res = await fetch(`/api/orders/my?uid=${encodeURIComponent(uid)}`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                const data = await res.json();
+            // Single collection-level listener — replaces the old API fetch + document listener.
+            // Fires immediately with cached data, then updates on any order change OR new order.
+            const q = query(
+                collection(db, "orders"),
+                where("customerUid", "==", uid),
+                orderBy("createdAt", "desc"),
+                limit(10)
+            );
+
+            unsub = onSnapshot(q, (snap) => {
                 if (cancelled) return;
-                if (data.order) {
-                    setOrder(data.order);
-                    prevStatusRef.current = data.order.status || null;
-                    startListener(data.order.id);
+
+                const docs = snap.docs.map((d) => {
+                    const data = d.data();
+                    return {
+                        id: d.id,
+                        ...data,
+                        createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+                        updatedAt: data.updatedAt?.toDate?.()?.toISOString() || null,
+                        expiresAt: data.expiresAt?.toDate?.()?.toISOString() || null,
+                    };
+                });
+
+                const activeOrder = pickActiveOrder(docs);
+                const prev = prevOrderRef.current;
+
+                // Fire notification only when the same order's status changes
+                if (
+                    activeOrder &&
+                    prev?.id === activeOrder.id &&
+                    prev.status &&
+                    prev.status !== activeOrder.status
+                ) {
+                    syncOrderStatusNotification({
+                        id: activeOrder.id,
+                        orderNumber: activeOrder.orderNumber || null,
+                        status: activeOrder.status,
+                    });
                 }
-            } catch (e) {
-                console.error(e);
-            } finally {
+
+                prevOrderRef.current = activeOrder
+                    ? { id: activeOrder.id, status: activeOrder.status }
+                    : null;
+
+                setOrder(activeOrder);
+                setLoading(false);
+            }, (err) => {
+                console.error("Orders listener error:", err);
                 if (!cancelled) setLoading(false);
-            }
+            });
         })();
 
         return () => {
             cancelled = true;
-            if (unsubRef.current) unsubRef.current();
+            if (unsub) unsub();
         };
-    }, [router, startListener]);
+    }, [router]);
 
     async function handleCancel() {
         if (!order?.id) return;
