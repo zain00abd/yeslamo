@@ -233,6 +233,7 @@ export default function DriverDashboard() {
     const [cancelReason, setCancelReason] = useState(CANCEL_REASONS[0]);
     const [verifyModalOrder, setVerifyModalOrder] = useState(null);
     const [verifyModalCalled, setVerifyModalCalled] = useState(false);
+    const [verifyActionsExpanded, setVerifyActionsExpanded] = useState(false);
     const [onTheWayModalOrder, setOnTheWayModalOrder] = useState(null);
     const [onTheWayPurchaseInput, setOnTheWayPurchaseInput] = useState("");
     const [onTheWaySaving, setOnTheWaySaving] = useState(false);
@@ -487,6 +488,7 @@ export default function DriverDashboard() {
             showAppAlert(action === "verified" ? "✅ تم توثيق الزبون" : "🚫 تم الإبلاغ عن الزبون");
             setVerifyModalOrder(null);
             setVerifyModalCalled(false);
+            setVerifyActionsExpanded(false);
         } catch (err) {
             console.error("verify error:", err);
             showAppAlert("حدث خطأ");
@@ -516,6 +518,7 @@ export default function DriverDashboard() {
                 showAppAlert("تمت المتابعة على مسؤوليتك. أكمل الطلب بحذر.");
                 setVerifyModalOrder(null);
                 setVerifyModalCalled(false);
+                setVerifyActionsExpanded(false);
                 return;
             }
 
@@ -534,6 +537,7 @@ export default function DriverDashboard() {
                 );
                 setVerifyModalOrder(null);
                 setVerifyModalCalled(false);
+                setVerifyActionsExpanded(false);
                 return;
             }
 
@@ -552,6 +556,7 @@ export default function DriverDashboard() {
                 );
                 setVerifyModalOrder(null);
                 setVerifyModalCalled(false);
+                setVerifyActionsExpanded(false);
                 return;
             }
         } catch (err) {
@@ -663,17 +668,6 @@ export default function DriverDashboard() {
         <div className="driver-layout" ref={driverLayoutRef}>
             <header className="driver-header" ref={driverHeaderRef}>
                 <div className="driver-header-brand">
-                    <div className="driver-title">
-                        <span className="driver-title-icon-wrap" aria-hidden>
-                            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-                                <path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
-                            </svg>
-                        </span>
-                        <div className="driver-title-text-block">
-                            <span className="driver-title-eyebrow">يسلمو</span>
-                            <span className="driver-title-text">بوابة المندوبين</span>
-                        </div>
-                    </div>
                     <div className="driver-header-wallet" title="رصيد المحفظة">
                         <span className="driver-header-wallet-icon" aria-hidden>
                             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -692,9 +686,20 @@ export default function DriverDashboard() {
                     </div>
                 </div>
                 <div className="driver-header-actions">
-                    <div className={`driver-status-badge ${driverSettings.isAvailable ? "" : "driver-status-badge--offline"}`}>
+                    <button
+                        type="button"
+                        className={`driver-status-badge ${driverSettings.isAvailable ? "" : "driver-status-badge--offline"}`}
+                        onClick={() =>
+                            setDriverSettings((prev) => ({
+                                ...prev,
+                                isAvailable: !prev.isAvailable,
+                            }))
+                        }
+                        aria-pressed={driverSettings.isAvailable}
+                        title={driverSettings.isAvailable ? "اضغط للتحويل إلى غير متاح" : "اضغط للتحويل إلى متاح"}
+                    >
                         {driverSettings.isAvailable ? "متاح" : "غير متاح"}
-                    </div>
+                    </button>
                     <div className="driver-header-toolbar">
                         <Link
                             href="/driver/settings"
@@ -902,6 +907,7 @@ export default function DriverDashboard() {
                                                             onClick={() => {
                                                                 setVerifyModalOrder(order);
                                                                 setVerifyModalCalled(false);
+                                                                setVerifyActionsExpanded(false);
                                                             }}
                                                             style={{
                                                                 fontSize: "0.62rem",
@@ -992,6 +998,25 @@ export default function DriverDashboard() {
                                         {/* Call-flow helper: show only for call-based orders */}
                                         {isCallOrder && !isCallExpanded && (
                                             <div style={{ marginBottom: "12px" }}>
+                                                {/* تنبيه */}
+                                                <div style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: "8px",
+                                                    padding: "9px 12px",
+                                                    borderRadius: "10px",
+                                                    background: "rgba(220,38,38,0.07)",
+                                                    border: "1px solid rgba(220,38,38,0.2)",
+                                                    marginBottom: "10px",
+                                                }}>
+                                                    <svg viewBox="0 0 24 24" width="15" height="15" fill="#dc2626" style={{ flexShrink: 0 }}>
+                                                        <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+                                                    </svg>
+                                                    <span style={{ fontSize: "0.8rem", color: "#b91c1c", fontWeight: 800, lineHeight: 1.4 }}>
+                                                        يجب الاتصال بالزبون فوراً للتحقق من الطلب
+                                                    </span>
+                                                </div>
+                                                {/* زر الاتصال */}
                                                 <a
                                                     href={`tel:${order.customerPhone}`}
                                                     onClick={() =>
@@ -999,30 +1024,35 @@ export default function DriverDashboard() {
                                                     }
                                                     style={{
                                                         width: "100%",
-                                                        padding: "12px",
-                                                        borderRadius: "8px",
+                                                        padding: "14px",
+                                                        borderRadius: "12px",
                                                         border: "none",
-                                                        background: "var(--driver-primary-gradient)",
+                                                        background: "linear-gradient(135deg, #16a34a, #15803d)",
                                                         color: "white",
                                                         fontFamily: "inherit",
                                                         fontWeight: 800,
-                                                        fontSize: "0.95rem",
+                                                        fontSize: "1rem",
                                                         textDecoration: "none",
                                                         display: "flex",
                                                         alignItems: "center",
                                                         justifyContent: "center",
-                                                        gap: "8px",
-                                                        boxShadow: "0 4px 14px rgba(16,185,129,0.28)",
+                                                        gap: "10px",
+                                                        boxShadow: "0 6px 18px rgba(22,163,74,0.35)",
+                                                        letterSpacing: "0.01em",
                                                     }}
                                                 >
-                                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                                                        <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
-                                                    </svg>
+                                                    <span style={{
+                                                        width: 34, height: 34, borderRadius: "50%",
+                                                        background: "rgba(255,255,255,0.2)",
+                                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                                        flexShrink: 0,
+                                                    }}>
+                                                        <svg viewBox="0 0 24 24" width="18" height="18" fill="white" aria-hidden="true">
+                                                            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+                                                        </svg>
+                                                    </span>
                                                     الاتصال بالزبون
                                                 </a>
-                                                <div style={{ marginTop: "6px", fontSize: "0.78rem", color: "#dc2626", fontWeight: 800 }}>
-                                                    لا يجب التأخر في الاتصال
-                                                </div>
                                             </div>
                                         )}
 
@@ -1317,6 +1347,7 @@ export default function DriverDashboard() {
                     onClick={() => {
                         setVerifyModalOrder(null);
                         setVerifyModalCalled(false);
+                        setVerifyActionsExpanded(false);
                     }}
                 >
                     <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "400px" }}>
@@ -1328,6 +1359,7 @@ export default function DriverDashboard() {
                                 onClick={() => {
                                     setVerifyModalOrder(null);
                                     setVerifyModalCalled(false);
+                                    setVerifyActionsExpanded(false);
                                 }}
                             >
                                 <svg viewBox="0 0 24 24" width="22" height="22" fill="#64748b">
@@ -1343,7 +1375,10 @@ export default function DriverDashboard() {
                                 </p>
                                 <a
                                     href={`tel:${verifyModalOrder.customerPhone}`}
-                                    onClick={() => setVerifyModalCalled(true)}
+                                    onClick={() => {
+                                        setVerifyModalCalled(true);
+                                        setVerifyActionsExpanded(false);
+                                    }}
                                     style={{
                                         width: "100%",
                                         padding: "12px 14px",
@@ -1369,7 +1404,10 @@ export default function DriverDashboard() {
                                 </a>
                                 <button
                                     type="button"
-                                    onClick={() => setVerifyModalCalled(true)}
+                                    onClick={() => {
+                                        setVerifyModalCalled(true);
+                                        setVerifyActionsExpanded(false);
+                                    }}
                                     style={{
                                         width: "100%",
                                         marginTop: "10px",
@@ -1389,144 +1427,152 @@ export default function DriverDashboard() {
                             </>
                         ) : (
                             <>
-                                <p style={{ fontSize: "0.86rem", color: "var(--driver-text-muted)", lineHeight: 1.6, marginBottom: "12px", fontWeight: 600 }}>
+                                <p style={{ fontSize: "0.86rem", color: "var(--driver-text-muted)", lineHeight: 1.6, marginBottom: "14px", fontWeight: 600 }}>
                                     بعد التواصل، اختر الإجراء المناسب:
                                 </p>
                                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                                    <div
+
+                                    {/* ✅ توثيق */}
+                                    <button
+                                        type="button"
+                                        onClick={() => handleVerifyCustomer(verifyModalOrder, "verified")}
                                         style={{
+                                            width: "100%",
+                                            padding: "13px 16px",
+                                            borderRadius: "12px",
+                                            border: "none",
+                                            background: "linear-gradient(135deg, #059669, #047857)",
+                                            color: "white",
+                                            fontFamily: "inherit",
+                                            fontWeight: 800,
+                                            fontSize: "0.95rem",
+                                            cursor: "pointer",
                                             display: "flex",
                                             alignItems: "center",
-                                            justifyContent: "space-between",
-                                            gap: "10px",
-                                            padding: "10px 12px",
-                                            borderRadius: "10px",
-                                            border: "1px solid var(--driver-border)",
-                                            background: "var(--driver-bg)",
+                                            justifyContent: "center",
+                                            gap: "8px",
+                                            boxShadow: "0 4px 14px rgba(5,150,105,0.3)",
                                         }}
                                     >
-                                        <span style={{ fontWeight: 800, fontSize: "0.9rem", color: "var(--driver-text)" }}>حقيقي</span>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleVerifyCustomer(verifyModalOrder, "verified")}
-                                            style={{
-                                                padding: "8px 18px",
-                                                borderRadius: "8px",
-                                                border: "none",
-                                                background: "#059669",
-                                                color: "white",
-                                                fontFamily: "inherit",
-                                                fontWeight: 800,
-                                                fontSize: "0.82rem",
-                                                cursor: "pointer",
-                                                flexShrink: 0,
-                                            }}
-                                        >
-                                            تأكيد
-                                        </button>
-                                    </div>
-                                    <div
+                                        <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+                                        توثيق الزبون — حقيقي
+                                    </button>
+
+                                    {/* ── فاصل اتخاذ إجراء ── */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setVerifyActionsExpanded((prev) => !prev)}
                                         style={{
+                                            width: "100%",
+                                            padding: "11px 16px",
+                                            borderRadius: "12px",
+                                            border: "1.5px solid #dc2626",
+                                            background: verifyActionsExpanded ? "rgba(220,38,38,0.08)" : "#dc2626",
+                                            color: verifyActionsExpanded ? "#b91c1c" : "white",
+                                            fontFamily: "inherit",
+                                            fontWeight: 800,
+                                            fontSize: "0.88rem",
+                                            cursor: "pointer",
                                             display: "flex",
                                             alignItems: "center",
-                                            justifyContent: "space-between",
-                                            gap: "10px",
-                                            padding: "10px 12px",
-                                            borderRadius: "10px",
-                                            border: "1px solid rgba(220, 38, 38, 0.35)",
-                                            background: "rgba(254, 242, 242, 0.6)",
+                                            justifyContent: "center",
+                                            gap: "8px",
+                                            transition: "background 0.2s",
                                         }}
                                     >
-                                        <span style={{ fontWeight: 800, fontSize: "0.88rem", color: "#b91c1c", lineHeight: 1.45 }}>
-                                            الرقم غير موجود بالخدمة
-                                        </span>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleVerifyReport(verifyModalOrder, "number_not_in_service")}
-                                            style={{
-                                                padding: "8px 18px",
-                                                borderRadius: "8px",
-                                                border: "1.5px solid #dc2626",
-                                                background: "white",
-                                                color: "#dc2626",
-                                                fontFamily: "inherit",
-                                                fontWeight: 800,
-                                                fontSize: "0.82rem",
-                                                cursor: "pointer",
-                                                flexShrink: 0,
-                                            }}
-                                        >
-                                            تأكيد
-                                        </button>
-                                    </div>
-                                    <div
-                                        style={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "space-between",
-                                            gap: "10px",
-                                            padding: "10px 12px",
-                                            borderRadius: "10px",
-                                            border: "1px solid rgba(245, 158, 11, 0.35)",
-                                            background: "rgba(255, 251, 235, 0.7)",
-                                        }}
-                                    >
-                                        <span style={{ fontWeight: 800, fontSize: "0.88rem", color: "#a16207", lineHeight: 1.45 }}>
-                                            لم يرد أحد على المكالمة
-                                        </span>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleVerifyReport(verifyModalOrder, "no_answer_on_call")}
-                                            style={{
-                                                padding: "8px 18px",
-                                                borderRadius: "8px",
-                                                border: "1.5px solid #d97706",
-                                                background: "white",
-                                                color: "#b45309",
-                                                fontFamily: "inherit",
-                                                fontWeight: 800,
-                                                fontSize: "0.82rem",
-                                                cursor: "pointer",
-                                                flexShrink: 0,
-                                            }}
-                                        >
-                                            تأكيد
-                                        </button>
-                                    </div>
-                                    <div
-                                        style={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "space-between",
-                                            gap: "10px",
-                                            padding: "10px 12px",
-                                            borderRadius: "10px",
-                                            border: "1px solid rgba(37, 99, 235, 0.35)",
-                                            background: "rgba(239, 246, 255, 0.75)",
-                                        }}
-                                    >
-                                        <span style={{ fontWeight: 800, fontSize: "0.88rem", color: "#1d4ed8", lineHeight: 1.45 }}>
-                                            لا يمكنني الاتصال حالياً للتأكيد
-                                        </span>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleVerifyReport(verifyModalOrder, "continue_on_driver_risk")}
-                                            style={{
-                                                padding: "8px 14px",
-                                                borderRadius: "8px",
-                                                border: "1.5px solid #2563eb",
-                                                background: "white",
-                                                color: "#1d4ed8",
-                                                fontFamily: "inherit",
-                                                fontWeight: 800,
-                                                fontSize: "0.8rem",
-                                                cursor: "pointer",
-                                                flexShrink: 0,
-                                            }}
-                                        >
-                                            متابعة على مسؤوليتي
-                                        </button>
-                                    </div>
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+                                        اتخاذ إجراء
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style={{ marginRight: "auto", transform: verifyActionsExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}><path d="M7 10l5 5 5-5z"/></svg>
+                                    </button>
+
+                                    {verifyActionsExpanded && (
+                                        <div style={{
+                                            borderRadius: "12px",
+                                            border: "1px solid rgba(220,38,38,0.18)",
+                                            background: "#fff",
+                                            overflow: "hidden",
+                                        }}>
+                                            {/* الرقم غير موجود */}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleVerifyReport(verifyModalOrder, "number_not_in_service")}
+                                                style={{
+                                                    width: "100%",
+                                                    padding: "13px 16px",
+                                                    border: "none",
+                                                    borderBottom: "1px solid rgba(220,38,38,0.12)",
+                                                    background: "transparent",
+                                                    fontFamily: "inherit",
+                                                    fontWeight: 800,
+                                                    fontSize: "0.88rem",
+                                                    color: "#b91c1c",
+                                                    cursor: "pointer",
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: "10px",
+                                                    textAlign: "right",
+                                                }}
+                                            >
+                                                <span style={{ width: 32, height: 32, borderRadius: "8px", background: "rgba(220,38,38,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="#dc2626"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+                                                </span>
+                                                الرقم غير موجود بالخدمة
+                                            </button>
+
+                                            {/* لم يرد */}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleVerifyReport(verifyModalOrder, "no_answer_on_call")}
+                                                style={{
+                                                    width: "100%",
+                                                    padding: "13px 16px",
+                                                    border: "none",
+                                                    borderBottom: "1px solid rgba(217,119,6,0.12)",
+                                                    background: "transparent",
+                                                    fontFamily: "inherit",
+                                                    fontWeight: 800,
+                                                    fontSize: "0.88rem",
+                                                    color: "#a16207",
+                                                    cursor: "pointer",
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: "10px",
+                                                    textAlign: "right",
+                                                }}
+                                            >
+                                                <span style={{ width: 32, height: 32, borderRadius: "8px", background: "rgba(245,158,11,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="#d97706"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 12h-2v-2h2v2zm0-4h-2V6h2v4z"/></svg>
+                                                </span>
+                                                لم يرد أحد على المكالمة
+                                            </button>
+
+                                            {/* متابعة على المسؤولية */}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleVerifyReport(verifyModalOrder, "continue_on_driver_risk")}
+                                                style={{
+                                                    width: "100%",
+                                                    padding: "13px 16px",
+                                                    border: "none",
+                                                    background: "transparent",
+                                                    fontFamily: "inherit",
+                                                    fontWeight: 800,
+                                                    fontSize: "0.88rem",
+                                                    color: "#1d4ed8",
+                                                    cursor: "pointer",
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: "10px",
+                                                    textAlign: "right",
+                                                }}
+                                            >
+                                                <span style={{ width: 32, height: 32, borderRadius: "8px", background: "rgba(37,99,235,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="#2563eb"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                                                </span>
+                                                متابعة على مسؤوليتي
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </>
                         )}

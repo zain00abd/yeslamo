@@ -6,7 +6,6 @@ import Image from "next/image";
 import { auth, db } from "@/lib/firebase";
 import { showAppAlert } from "@/lib/appAlert";
 import { doc, getDoc, onSnapshot } from "firebase/firestore";
-import { DRIVER_DELIVERY_COMMISSION_RATE } from "@/lib/orderPricing";
 import "../driver.css";
 
 const DRIVER_AREA_ID = "default";
@@ -218,13 +217,6 @@ export default function DriverSettingsPage() {
                     <Link href="/driver" className="driver-settings-back-link">
                         رجوع
                     </Link>
-                    <button
-                        type="button"
-                        className="driver-logout-btn"
-                        onClick={() => auth.signOut()}
-                    >
-                        تسجيل الخروج
-                    </button>
                 </div>
             </header>
 
@@ -235,38 +227,6 @@ export default function DriverSettingsPage() {
                     <div style={{ fontSize: "1.65rem", fontWeight: 900, color: "var(--driver-primary)", fontVariantNumeric: "tabular-nums" }}>
                         {walletBalanceSyp === null ? "…" : `${walletBalanceSyp} ل.س`}
                     </div>
-                    {driverAccountNumber ? (
-                        <div
-                            style={{
-                                marginTop: "14px",
-                                paddingTop: "14px",
-                                borderTop: "1px dashed var(--driver-border)",
-                            }}
-                        >
-                            <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--driver-text-muted)", marginBottom: "6px" }}>
-                                رقم حساب المندوب (للاستعلام وشحن الرصيد)
-                            </div>
-                            <div
-                                dir="ltr"
-                                style={{
-                                    fontSize: "1.2rem",
-                                    fontWeight: 900,
-                                    letterSpacing: "0.06em",
-                                    color: "var(--driver-primary)",
-                                    fontVariantNumeric: "tabular-nums",
-                                }}
-                            >
-                                {driverAccountNumber}
-                            </div>
-                            <p style={{ fontSize: "0.78rem", color: "var(--driver-text-muted)", marginTop: "8px", lineHeight: 1.5, fontWeight: 600 }}>
-                                أعطِ هذا الرقم لإدارة يسلمو عند طلب شحن رصيدك أو الاستعلام عن حسابك.
-                            </p>
-                        </div>
-                    ) : null}
-                    <p style={{ fontSize: "0.82rem", color: "var(--driver-text-muted)", marginTop: "12px", lineHeight: 1.55, fontWeight: 600 }}>
-                        عند قبول أي طلب يُخصم تلقائياً <strong style={{ color: "var(--driver-text)" }}>{Math.round(DRIVER_DELIVERY_COMMISSION_RATE * 100)}%</strong> من{" "}
-                        <strong style={{ color: "var(--driver-text)" }}>رسوم التوصيل</strong> للطلب (وليس من ثمن البضاعة). لشحن الرصيد أو الاستفسار، تواصل مع إدارة يسلمو.
-                    </p>
                 </div>
 
                 <div className="section-heading">إعدادات الحساب</div>
@@ -275,6 +235,10 @@ export default function DriverSettingsPage() {
                     <div className="driver-profile-card">
                         <div className="driver-profile-title">بيانات المندوب</div>
                         <div className="driver-profile-list">
+                            <div className="driver-profile-item">
+                                <span className="driver-profile-label">رقم حساب المندوب</span>
+                                <span className="driver-profile-value" dir="ltr">{driverAccountNumber || "—"}</span>
+                            </div>
                             <div className="driver-profile-item">
                                 <span className="driver-profile-label">الاسم</span>
                                 <span className="driver-profile-value">{settings.name || "—"}</span>
@@ -374,6 +338,15 @@ export default function DriverSettingsPage() {
                         </div>
                     )}
                 </div>
+
+                <button
+                    type="button"
+                    className="driver-logout-btn"
+                    onClick={() => auth.signOut()}
+                    style={{ width: "100%", marginTop: "16px", background: "#dc2626" }}
+                >
+                    تسجيل الخروج
+                </button>
             </main>
         </div>
     );
