@@ -56,7 +56,7 @@ function OrderModal({ order, onClose, onAccept, isAccepting, walletBalanceSyp, a
     let swipeHint = "";
     if (walletBalanceSyp === null) swipeHint = "جاري التحميل...";
     else if (atActiveLimit) {
-        swipeHint = `أنهِ طلباتك الحالية أولاً (حد أقصى ${DRIVER_MAX_ACTIVE_ORDERS_BEFORE_ACCEPT} طلبات نشطة)`;
+        swipeHint = `أكمل طلباتك الحالية أولاً (حد أقصى ${DRIVER_MAX_ACTIVE_ORDERS_BEFORE_ACCEPT} طلبات نشطة)`;
     } else if (walletBalanceSyp < commission) swipeHint = "الرصيد غير كافٍ";
 
     return (
@@ -134,11 +134,24 @@ function OrderModal({ order, onClose, onAccept, isAccepting, walletBalanceSyp, a
                     </div>
                 )}
 
-                <div style={{ marginTop: "18px" }}>
+                {swipeBlocked && swipeHint && (
+                    <div className={`order-modal-block-banner${atActiveLimit ? " order-modal-block-banner--limit" : " order-modal-block-banner--wallet"}`}>
+                        {atActiveLimit ? (
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" style={{ flexShrink: 0 }}>
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+                            </svg>
+                        ) : (
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" style={{ flexShrink: 0 }}>
+                                <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
+                            </svg>
+                        )}
+                        <span>{swipeHint}</span>
+                    </div>
+                )}
+                <div style={{ marginTop: swipeBlocked && swipeHint ? "10px" : "18px" }}>
                     <SwipeToAccept
                         isLoading={isAccepting}
                         disabled={swipeBlocked}
-                        disabledHint={swipeBlocked ? swipeHint : undefined}
                         onAccept={() => onAccept(order.id)}
                     />
                 </div>
@@ -229,6 +242,7 @@ export default function DriverDashboard() {
     const [activeTab, setActiveTab] = useState("available"); // "available" | "mine"
     const [callActionsReady, setCallActionsReady] = useState({});
     const [callDetailsExpanded, setCallDetailsExpanded] = useState({});
+    const [itemsExpanded, setItemsExpanded] = useState({});
     const [cancelModalOrder, setCancelModalOrder] = useState(null);
     const [cancelReason, setCancelReason] = useState(CANCEL_REASONS[0]);
     const [verifyModalOrder, setVerifyModalOrder] = useState(null);
@@ -426,7 +440,7 @@ export default function DriverDashboard() {
         if (!user) return;
         if (acceptedOrders.length >= DRIVER_MAX_ACTIVE_ORDERS_BEFORE_ACCEPT) {
             showAppAlert(
-                `لديك ${DRIVER_MAX_ACTIVE_ORDERS_BEFORE_ACCEPT} طلبات لم تُسلَّم بعد. أنهِ أحدها قبل قبول طلب جديد.`
+                `لديك ${DRIVER_MAX_ACTIVE_ORDERS_BEFORE_ACCEPT} طلبات لم تُسلَّم بعد. أكمل أحدها قبل قبول طلب جديد.`
             );
             return;
         }
@@ -767,7 +781,7 @@ export default function DriverDashboard() {
                                     lineHeight: 1.55,
                                 }}
                             >
-                                لديك {DRIVER_MAX_ACTIVE_ORDERS_BEFORE_ACCEPT} طلبات لم تُسلَّم بعد. أنهِ أحدها من «طلباتي» قبل
+                                لديك {DRIVER_MAX_ACTIVE_ORDERS_BEFORE_ACCEPT} طلبات لم تُسلَّم بعد. أكمل أحدها من «طلباتي» قبل
                                 قبول طلب جديد.
                             </div>
                         )}
@@ -799,6 +813,12 @@ export default function DriverDashboard() {
                                                     <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
                                                 </svg>
                                                 {order.customerAddress}
+                                            </div>
+                                            <div className="order-card-delivery-fee">
+                                                <span className="order-card-delivery-fee-label">رسوم التوصيل</span>
+                                                <span className="order-card-delivery-fee-value" dir="ltr">
+                                                    {getDeliveryFeeForOrder(order)} ل.س
+                                                </span>
                                             </div>
                                         </div>
                                         <button className="order-details-btn" onClick={() => setSelectedOrder(order)}>
@@ -953,43 +973,36 @@ export default function DriverDashboard() {
                                         </div>
 
                                         {/* Address & map */}
-                                        <div style={{ background: "var(--driver-bg)", borderRadius: "8px", padding: "12px", marginBottom: "12px", border: "1px solid var(--driver-border)" }}>
-                                            <div style={{ display: "flex", gap: "10px", alignItems: "stretch" }}>
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <div style={{ fontSize: "0.78rem", color: "var(--driver-text-muted)", fontWeight: 700, marginBottom: "6px", display: "flex", alignItems: "center", gap: "4px" }}><svg viewBox="0 0 24 24" width="14" height="14" fill="var(--driver-text-muted)"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg> عنوان التوصيل</div>
-                                                    <div style={{ fontWeight: 600, color: "var(--driver-text)", fontSize: "0.9rem", lineHeight: "1.5", textAlign: "right" }}>
-                                                        {order.customerAddress}
-                                                    </div>
-                                                    {order.locationDesc && (
-                                                        <div style={{ fontSize: "0.9rem", color: "var(--driver-text-muted)", marginTop: "6px", fontWeight: 600 }}>{order.locationDesc}</div>
+                                        <div className="accepted-order-address-card">
+                                            <div className="accepted-order-address-inner">
+                                                <svg className="accepted-order-address-pin" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                                                </svg>
+                                                <div className="accepted-order-address-body">
+                                                    <span className="accepted-order-address-label">عنوان التوصيل</span>
+                                                    {/* إن وجد وصف تفصيلي: أظهر المدينة فقط أعلاه ثم الوصف أدناه */}
+                                                    {order.locationDesc ? (
+                                                        <>
+                                                            <span className="accepted-order-address-text">
+                                                                {order.customerAddress.split("،")[0].trim()}
+                                                            </span>
+                                                            <span className="accepted-order-address-desc">{order.locationDesc}</span>
+                                                        </>
+                                                    ) : (
+                                                        <span className="accepted-order-address-text">{order.customerAddress}</span>
                                                     )}
                                                 </div>
                                                 {order.locationCoords && (
                                                     <a
                                                         href={`https://www.google.com/maps?q=${order.locationCoords.lat},${order.locationCoords.lng}`}
                                                         target="_blank" rel="noopener noreferrer"
-                                                        style={{
-                                                            width: "120px",
-                                                            minWidth: "120px",
-                                                            display: "flex",
-                                                            flexDirection: "column",
-                                                            alignItems: "center",
-                                                            justifyContent: "center",
-                                                            gap: "6px",
-                                                            padding: "8px 10px",
-                                                            background: "var(--driver-primary)",
-                                                            color: "white",
-                                                            borderRadius: "8px",
-                                                            textDecoration: "none",
-                                                            fontWeight: 700,
-                                                            fontSize: "0.82rem",
-                                                            textAlign: "center",
-                                                        }}
+                                                        className="accepted-order-map-btn"
+                                                        aria-label="فتح العنوان في الخريطة"
                                                     >
-                                                        <svg viewBox="0 0 24 24" width="18" height="18" fill="white">
-                                                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                                                        <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true">
+                                                            <path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z" />
                                                         </svg>
-                                                        فتح في الخريطة
+                                                        خريطة
                                                     </a>
                                                 )}
                                             </div>
@@ -1056,34 +1069,56 @@ export default function DriverDashboard() {
                                             </div>
                                         )}
 
-                                        {/* Items + Notes */}
-                                        {(!isCallOrder || isCallExpanded) && (
-                                            <>
-                                                <div style={{ marginBottom: order.notes ? "12px" : 0 }}>
-                                                    <div style={{ fontSize: "0.78rem", color: "var(--driver-text-muted)", fontWeight: 700, marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                                        <span>الطلبات</span>
-                                                        <span style={{ background: "var(--driver-bg)", color: "var(--driver-text-muted)", borderRadius: "6px", padding: "2px 8px", fontSize: "0.78rem" }}>{order.items?.length || 0} أصناف</span>
-                                                    </div>
-                                                    {order.items?.map((item, idx) => (
-                                                        <div key={idx} style={{
-                                                            display: "flex", justifyContent: "space-between", alignItems: "center",
-                                                            padding: "8px 0", borderBottom: idx < (order.items.length - 1) ? "1px solid var(--driver-border)" : "none",
-                                                            fontSize: "0.9rem", color: "var(--driver-text)", direction: "rtl", textAlign: "right",
-                                                        }}>
-                                                            <span style={{ fontWeight: 600 }}>{item.name}</span>
-                                                            <span style={{ background: "rgba(30, 58, 95, 0.08)", color: "var(--driver-primary)", borderRadius: "6px", padding: "2px 8px", fontWeight: 700, fontSize: "0.82rem", flexShrink: 0 }}>× {item.quantity}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
+                                        {/* Items + Notes — collapsible */}
+                                        {(!isCallOrder || isCallExpanded) && (() => {
+                                            const isOpen = itemsExpanded[order.id] !== false; // مفتوح افتراضياً
+                                            const count = order.items?.length || 0;
+                                            return (
+                                                <div className="accepted-order-items-section">
+                                                    <button
+                                                        type="button"
+                                                        className="accepted-order-items-toggle"
+                                                        onClick={() => setItemsExpanded((prev) => ({ ...prev, [order.id]: !isOpen }))}
+                                                        aria-expanded={isOpen}
+                                                    >
+                                                        <span className="accepted-order-items-toggle-title">
+                                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                                                                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z" />
+                                                            </svg>
+                                                            الطلبات
+                                                        </span>
+                                                        <span className="accepted-order-items-toggle-end">
+                                                            <span className="accepted-order-items-count">{count} {count === 1 ? "صنف" : "أصناف"}</span>
+                                                            <svg
+                                                                className={`accepted-order-items-chevron${isOpen ? " accepted-order-items-chevron--open" : ""}`}
+                                                                viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"
+                                                            >
+                                                                <path d="M7 10l5 5 5-5z" />
+                                                            </svg>
+                                                        </span>
+                                                    </button>
 
-                                                {order.notes && !isCallOrder && (
-                                                    <div style={{ background: "#fefce8", borderRadius: "8px", padding: "10px 12px", fontSize: "0.88rem", color: "#854d0e", fontWeight: 600, border: "1px solid #fde68a", display: "flex", gap: "6px", alignItems: "flex-start" }}>
-                                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="#854d0e" style={{ flexShrink: 0, marginTop: 2 }}><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
-                                                        {order.notes}
-                                                    </div>
-                                                )}
-                                            </>
-                                        )}
+                                                    {isOpen && (
+                                                        <div className="accepted-order-items-list">
+                                                            {order.items?.map((item, idx) => (
+                                                                <div key={idx} className="accepted-order-item-row">
+                                                                    <span className="accepted-order-item-name">{item.name}</span>
+                                                                    <span className="accepted-order-item-qty">× {item.quantity}</span>
+                                                                </div>
+                                                            ))}
+                                                            {order.notes && !isCallOrder && (
+                                                                <div className="accepted-order-notes">
+                                                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="#92400e" aria-hidden="true" style={{ flexShrink: 0, marginTop: 2 }}>
+                                                                        <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+                                                                    </svg>
+                                                                    <span>{order.notes}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
 
                                         {/* ── Status Actions ── */}
                                         <div style={{ marginTop: "16px" }}>
@@ -1170,20 +1205,9 @@ export default function DriverDashboard() {
                                                         <span>رسوم التوصيل</span>
                                                         <span style={{ fontVariantNumeric: "tabular-nums" }}>{getDeliveryFeeForOrder(order)} ل.س</span>
                                                     </div>
-                                                    <div
-                                                        style={{
-                                                            display: "flex",
-                                                            justifyContent: "space-between",
-                                                            alignItems: "center",
-                                                            paddingTop: "8px",
-                                                            borderTop: "1px dashed var(--driver-border)",
-                                                            fontSize: "0.95rem",
-                                                            fontWeight: 900,
-                                                            color: "var(--driver-primary)",
-                                                        }}
-                                                    >
-                                                        <span>الإجمالي</span>
-                                                        <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                                                    <div className="accepted-order-total-row">
+                                                        <span className="accepted-order-total-label">الإجمالي</span>
+                                                        <span className="accepted-order-total-value" dir="ltr">
                                                             {typeof order.totalDueSyp === "number"
                                                                 ? order.totalDueSyp
                                                                 : order.itemsPurchaseSyp + getDeliveryFeeForOrder(order)}{" "}
@@ -1221,30 +1245,20 @@ export default function DriverDashboard() {
                             setOnTheWayPurchaseInput("");
                         }}
                     >
-                        <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "420px" }}>
+                        <div className="modal-content ontheway-modal" onClick={(e) => e.stopPropagation()}>
                             <div className="modal-header">
-                                <div className="modal-title">تأكيد «في الطريق»</div>
+                                <div className="modal-title">تأكيد في الطريق</div>
                                 <button
                                     type="button"
                                     className="close-btn"
                                     disabled={onTheWaySaving}
-                                    onClick={() => {
-                                        setOnTheWayModalOrder(null);
-                                        setOnTheWayPurchaseInput("");
-                                    }}
+                                    onClick={() => { setOnTheWayModalOrder(null); setOnTheWayPurchaseInput(""); }}
                                 >
-                                    <svg viewBox="0 0 24 24" width="22" height="22" fill="#64748b">
-                                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                                    </svg>
+                                    <svg viewBox="0 0 24 24" width="20" height="20" fill="#64748b"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>
                                 </button>
                             </div>
-                            <p style={{ fontSize: "0.88rem", color: "var(--driver-text-muted)", lineHeight: 1.65, marginBottom: "12px", fontWeight: 600 }}>
-                                أدخل المبلغ الذي دفعته لشراء محتوى الطلب فقط{" "}
-                                <strong style={{ color: "var(--driver-text)" }}>دون احتساب رسوم التوصيل</strong>. سيظهر للزبون الإجمالي مع التوصيل.
-                            </p>
-                            <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 800, color: "var(--driver-text-muted)", marginBottom: "6px" }}>
-                                مبلغ المشتريات (ل.س جديدة)
-                            </label>
+
+                            <label className="ontheway-label">مبلغ المشتريات (ل.س)</label>
                             <input
                                 type="number"
                                 inputMode="decimal"
@@ -1255,65 +1269,20 @@ export default function DriverDashboard() {
                                 onChange={(e) => setOnTheWayPurchaseInput(e.target.value)}
                                 placeholder="0"
                                 disabled={onTheWaySaving}
-                                style={{
-                                    width: "100%",
-                                    padding: "12px 14px",
-                                    borderRadius: "10px",
-                                    border: "1px solid var(--driver-border)",
-                                    fontSize: "1.1rem",
-                                    fontWeight: 800,
-                                    fontVariantNumeric: "tabular-nums",
-                                    marginBottom: "12px",
-                                    fontFamily: "inherit",
-                                    boxSizing: "border-box",
-                                }}
+                                className="ontheway-input"
                             />
-                            <div
-                                style={{
-                                    padding: "12px 14px",
-                                    borderRadius: "10px",
-                                    background: "var(--driver-bg)",
-                                    border: "1px solid var(--driver-border)",
-                                    marginBottom: "14px",
-                                }}
-                            >
-                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.86rem", fontWeight: 700, marginBottom: "6px" }}>
-                                    <span style={{ color: "var(--driver-text-muted)" }}>رسوم التوصيل (ثابتة)</span>
-                                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{onTheWayFeePreview} ل.س</span>
-                                </div>
-                                <div
-                                    style={{
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        fontSize: "1rem",
-                                        fontWeight: 900,
-                                        color: "var(--driver-primary)",
-                                        paddingTop: "8px",
-                                        borderTop: "1px dashed var(--driver-border)",
-                                    }}
-                                >
-                                    <span>يُعرض للزبون — الإجمالي</span>
-                                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{onTheWayTotalPreview} ل.س</span>
-                                </div>
+
+                            <div className="ontheway-total-row">
+                                <span>الإجمالي للزبون</span>
+                                <span className="ontheway-total-val" dir="ltr">{onTheWayTotalPreview} ل.س</span>
                             </div>
-                            <div style={{ display: "flex", gap: "8px" }}>
+
+                            <div style={{ display: "flex", gap: "8px", marginTop: "14px" }}>
                                 <button
                                     type="button"
                                     disabled={onTheWaySaving}
-                                    onClick={() => {
-                                        setOnTheWayModalOrder(null);
-                                        setOnTheWayPurchaseInput("");
-                                    }}
-                                    style={{
-                                        flex: 1,
-                                        padding: "12px",
-                                        borderRadius: "10px",
-                                        border: "1px solid var(--driver-border)",
-                                        background: "var(--surface)",
-                                        fontFamily: "inherit",
-                                        fontWeight: 800,
-                                        cursor: onTheWaySaving ? "wait" : "pointer",
-                                    }}
+                                    onClick={() => { setOnTheWayModalOrder(null); setOnTheWayPurchaseInput(""); }}
+                                    className="ontheway-btn-cancel"
                                 >
                                     إلغاء
                                 </button>
@@ -1321,18 +1290,7 @@ export default function DriverDashboard() {
                                     type="button"
                                     disabled={onTheWaySaving}
                                     onClick={submitOnTheWayPricing}
-                                    style={{
-                                        flex: 1,
-                                        padding: "12px",
-                                        borderRadius: "10px",
-                                        border: "none",
-                                        background: "#2563eb",
-                                        color: "white",
-                                        fontFamily: "inherit",
-                                        fontWeight: 800,
-                                        cursor: onTheWaySaving ? "wait" : "pointer",
-                                        opacity: onTheWaySaving ? 0.85 : 1,
-                                    }}
+                                    className="ontheway-btn-confirm"
                                 >
                                     {onTheWaySaving ? "جاري الحفظ..." : "تأكيد"}
                                 </button>
